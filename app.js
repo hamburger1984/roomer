@@ -268,7 +268,7 @@ const FURNITURE_LIBRARY = [
   {
     id: "kitchenWallCabinet",
     name: "Hängeschrank",
-    category: "decoration",
+    category: "storage",
     width: 60,
     depth: 35,
     color: "#DCDCDC",
@@ -276,7 +276,7 @@ const FURNITURE_LIBRARY = [
   {
     id: "kitchenBaseCabinet",
     name: "Unterschrank",
-    category: "decoration",
+    category: "storage",
     width: 60,
     depth: 60,
     color: "#C0C0C0",
