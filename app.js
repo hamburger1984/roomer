@@ -326,6 +326,7 @@ const state = {
   calibrationStart: null,
   calibrationEnd: null,
   projectName: "Unbenanntes Projekt",
+  sidebarPinned: true,
 };
 
 // Canvas and context
@@ -513,6 +514,25 @@ function setupEventListeners() {
   document
     .getElementById("renameProject")
     .addEventListener("click", renameProject);
+
+  // Sidebar controls
+  const sidebar = document.getElementById("sidebar");
+  const sidebarPinBtn = document.getElementById("sidebarPinBtn");
+  const sidebarHoverTrigger = document.querySelector(".sidebar-hover-trigger");
+
+  sidebarPinBtn.addEventListener("click", toggleSidebarPin);
+
+  sidebarHoverTrigger.addEventListener("mouseenter", () => {
+    if (!state.sidebarPinned) {
+      sidebar.classList.remove("unpinned");
+    }
+  });
+
+  sidebar.addEventListener("mouseleave", () => {
+    if (!state.sidebarPinned) {
+      sidebar.classList.add("unpinned");
+    }
+  });
 
   // Keyboard shortcuts
   document.addEventListener("keydown", handleKeyDown);
@@ -1270,12 +1290,14 @@ function handleCanvasWheel(e) {
 // Update selected furniture panel
 function updateSelectedFurniturePanel() {
   const panel = document.getElementById("selectedFurniturePanel");
+  const furnitureListSection = document.querySelector(".section");
   const seatDepthLabel = document.getElementById("seatDepthLabel");
   const expandedWidthLabel = document.getElementById("expandedWidthLabel");
   const expandedDepthLabel = document.getElementById("expandedDepthLabel");
 
   if (state.selectedFurniture) {
     panel.style.display = "block";
+    furnitureListSection.style.display = "none";
     document.getElementById("furnitureName").value =
       state.selectedFurniture.name;
     document.getElementById("furnitureWidth").value =
@@ -1308,6 +1330,7 @@ function updateSelectedFurniturePanel() {
     }
   } else {
     panel.style.display = "none";
+    furnitureListSection.style.display = "block";
   }
 }
 
@@ -1510,6 +1533,23 @@ function renameProject() {
 // Update project name display in header
 function updateProjectNameDisplay() {
   document.getElementById("projectNameDisplay").textContent = state.projectName;
+}
+
+// Toggle sidebar pin state
+function toggleSidebarPin() {
+  state.sidebarPinned = !state.sidebarPinned;
+  const sidebar = document.getElementById("sidebar");
+  const sidebarPinBtn = document.getElementById("sidebarPinBtn");
+
+  if (state.sidebarPinned) {
+    sidebar.classList.remove("unpinned");
+    sidebarPinBtn.textContent = "📌";
+    sidebarPinBtn.title = "Sidebar lösen";
+  } else {
+    sidebar.classList.add("unpinned");
+    sidebarPinBtn.textContent = "📍";
+    sidebarPinBtn.title = "Sidebar anheften";
+  }
 }
 
 // Initialize app when DOM is ready

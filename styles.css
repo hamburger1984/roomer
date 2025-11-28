@@ -41,14 +41,73 @@ header h1 {
     display: flex;
     flex: 1;
     overflow: hidden;
+    position: relative;
 }
 
 .sidebar {
     width: 320px;
-    background: white;
-    border-right: 1px solid #ddd;
+    background: rgba(255, 255, 255, 0.92);
+    backdrop-filter: blur(10px);
+    border-right: 1px solid rgba(221, 221, 221, 0.5);
     overflow-y: auto;
     padding: 1rem;
+    position: relative;
+    transition:
+        transform 0.3s ease,
+        opacity 0.3s ease;
+    z-index: 100;
+}
+
+.sidebar.hidden {
+    transform: translateX(-100%);
+    opacity: 0;
+    pointer-events: none;
+}
+
+.sidebar.unpinned:not(:hover) {
+    transform: translateX(-100%);
+    opacity: 0;
+}
+
+.sidebar-pin-btn {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    background: rgba(52, 152, 219, 0.8);
+    color: white;
+    border: none;
+    width: 32px;
+    height: 32px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1.2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s;
+    z-index: 101;
+}
+
+.sidebar-pin-btn:hover {
+    background: rgba(41, 128, 185, 0.9);
+}
+
+.sidebar-hover-trigger {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 20px;
+    height: 100%;
+    z-index: 99;
+    pointer-events: all;
+}
+
+.sidebar.unpinned + .sidebar-hover-trigger {
+    pointer-events: all;
+}
+
+.sidebar:not(.unpinned) + .sidebar-hover-trigger {
+    pointer-events: none;
 }
 
 .section {
