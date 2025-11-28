@@ -73,9 +73,9 @@ header h1 {
 }
 
 .sidebar-pin-btn {
-    position: absolute;
-    top: 0.5rem;
-    right: 0.5rem;
+    position: fixed;
+    top: calc(60px + 0.5rem);
+    left: 0.5rem;
     background: rgba(52, 152, 219, 0.8);
     color: white;
     border: none;
@@ -87,8 +87,14 @@ header h1 {
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: background 0.2s;
+    transition:
+        background 0.2s,
+        left 0.3s ease;
     z-index: 101;
+}
+
+.sidebar:not(.unpinned) .sidebar-pin-btn {
+    left: calc(320px - 0.5rem - 32px);
 }
 
 .sidebar-pin-btn:hover {
