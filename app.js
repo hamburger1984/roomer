@@ -733,7 +733,25 @@ async function handleFloorPlanUpload(e) {
 
 // Adjust zoom
 function adjustZoom(delta) {
-  state.zoom = Math.max(0.1, Math.min(5, state.zoom + delta));
+  const wrapper = document.getElementById("canvasWrapper");
+  const oldZoom = state.zoom;
+  const newZoom = Math.max(0.1, Math.min(5, state.zoom + delta));
+
+  // Calculate center of viewport in canvas coordinates
+  const centerX = wrapper.clientWidth / 2;
+  const centerY = wrapper.clientHeight / 2;
+
+  // Convert to canvas coordinates before zoom
+  const canvasX = (centerX - state.pan.x) / oldZoom;
+  const canvasY = (centerY - state.pan.y) / oldZoom;
+
+  // Update zoom
+  state.zoom = newZoom;
+
+  // Adjust pan so the center point stays in the same screen position
+  state.pan.x = centerX - canvasX * newZoom;
+  state.pan.y = centerY - canvasY * newZoom;
+
   document.getElementById("zoomLevel").textContent =
     Math.round(state.zoom * 100) + "%";
   render();
