@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="de">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Roomer - Grundriss Planer</title>
+        <link rel="stylesheet" href="styles.css" />
+        <link rel="manifest" href="manifest.json" />
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    </head>
+    <body>
+        <div id="app">
+            <header>
+                <h1>Roomer - Grundriss Planer</h1>
+                <div class="header-controls">
+                    <button id="resetFurniture" class="btn btn-warning">
+                        Möbel zurücksetzen
+                    </button>
+                    <span
+                        id="projectNameDisplay"
+                        style="
+                            max-width: 200px;
+                            overflow: hidden;
+                            text-overflow: ellipsis;
+                            white-space: nowrap;
+                            padding: 0.5rem 1rem;
+                        "
+                        >Unbenanntes Projekt</span
+                    >
+                    <button
+                        id="renameProject"
+                        class="btn-icon"
+                        title="Projekt umbenennen"
+                    >
+                        ✏️
+                    </button>
+                    <button id="closeProject" class="btn">
+                        Projekt schließen
+                    </button>
+                </div>
+            </header>
+
+            <div class="container">
+                <!-- Sidebar -->
+                <aside class="sidebar">
+                    <div class="section">
+                        <h3>Möbel hinzufügen</h3>
+                        <div class="furniture-categories">
+                            <button
+                                class="category-btn active"
+                                data-category="all"
+                            >
+                                Alle
+                            </button>
+                            <button
+                                class="category-btn"
+                                data-category="seating"
+                            >
+                                Sitzgelegenheiten
+                            </button>
+                            <button class="category-btn" data-category="tables">
+                                Tische
+                            </button>
+                            <button
+                                class="category-btn"
+                                data-category="storage"
+                            >
+                                Schränke
+                            </button>
+                            <button class="category-btn" data-category="beds">
+                                Betten
+                            </button>
+                            <button
+                                class="category-btn"
+                                data-category="appliances"
+                            >
+                                Geräte
+                            </button>
+                            <button
+                                class="category-btn"
+                                data-category="decoration"
+                            >
+                                Dekoration
+                            </button>
+                        </div>
+                        <div id="furnitureList" class="furniture-list"></div>
+                    </div>
+
+                    <div
+                        class="section"
+                        id="selectedFurniturePanel"
+                        style="display: none"
+                    >
+                        <h3>Ausgewähltes Möbel</h3>
+                        <div class="furniture-properties">
+                            <label>
+                                Name:
+                                <input type="text" id="furnitureName" />
+                            </label>
+                            <label>
+                                Breite (cm):
+                                <input
+                                    type="number"
+                                    id="furnitureWidth"
+                                    step="1"
+                                    min="1"
+                                />
+                            </label>
+                            <label>
+                                Tiefe (cm):
+                                <input
+                                    type="number"
+                                    id="furnitureDepth"
+                                    step="1"
+                                    min="1"
+                                />
+                            </label>
+                            <label id="seatDepthLabel" style="display: none">
+                                Sitzfläche (cm):
+                                <input
+                                    type="number"
+                                    id="furnitureSeatDepth"
+                                    step="1"
+                                    min="1"
+                                />
+                            </label>
+                            <label
+                                id="expandedWidthLabel"
+                                style="display: none"
+                            >
+                                Breite ausgeklappt (cm):
+                                <input
+                                    type="number"
+                                    id="furnitureExpandedWidth"
+                                    step="1"
+                                    min="1"
+                                />
+                            </label>
+                            <label
+                                id="expandedDepthLabel"
+                                style="display: none"
+                            >
+                                Tiefe ausgeklappt (cm):
+                                <input
+                                    type="number"
+                                    id="furnitureExpandedDepth"
+                                    step="1"
+                                    min="1"
+                                />
+                            </label>
+                            <label>
+                                Rotation (°):
+                                <input
+                                    type="number"
+                                    id="furnitureRotation"
+                                    step="1"
+                                    min="0"
+                                    max="359"
+                                />
+                            </label>
+                            <button id="deleteFurniture" class="btn btn-danger">
+                                Löschen
+                            </button>
+                        </div>
+                    </div>
+                </aside>
+
+                <!-- Main Canvas Area -->
+                <main class="canvas-container">
+                    <div id="canvasWrapper" class="canvas-wrapper">
+                        <canvas id="mainCanvas"></canvas>
+                        <div id="uploadOverlay" class="upload-overlay">
+                            <div class="upload-box">
+                                <h2>Neues Projekt</h2>
+                                <p>Grundriss hochladen</p>
+                                <input
+                                    type="file"
+                                    id="floorPlanUpload"
+                                    accept="image/*,.pdf"
+                                    style="display: none"
+                                />
+                                <input
+                                    type="text"
+                                    id="projectNameInput"
+                                    placeholder="Projektname"
+                                    style="
+                                        width: 100%;
+                                        padding: 0.75rem;
+                                        margin-bottom: 1rem;
+                                        border: 1px solid #ddd;
+                                        border-radius: 4px;
+                                        font-size: 1rem;
+                                    "
+                                />
+                                <button
+                                    id="uploadBtn"
+                                    class="btn"
+                                    style="
+                                        font-size: 1.2rem;
+                                        padding: 1rem 2rem;
+                                        width: 100%;
+                                    "
+                                >
+                                    📁 Datei auswählen
+                                </button>
+
+                                <div
+                                    style="
+                                        margin-top: 2rem;
+                                        padding-top: 2rem;
+                                        border-top: 1px solid #ddd;
+                                    "
+                                >
+                                    <h3
+                                        style="
+                                            margin-bottom: 1rem;
+                                            font-size: 1.1rem;
+                                        "
+                                    >
+                                        Gespeicherte Projekte
+                                    </h3>
+                                    <div
+                                        id="projectList"
+                                        style="
+                                            max-height: 300px;
+                                            overflow-y: auto;
+                                        "
+                                    ></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Bottom Right Toolbar -->
+                        <div class="canvas-controls">
+                            <button id="zoomIn" class="btn-icon">+</button>
+                            <button id="zoomOut" class="btn-icon">-</button>
+                            <button id="resetView" class="btn-icon">⌂</button>
+                            <span id="zoomLevel">100%</span>
+                            <span class="scale-separator">|</span>
+                            <span id="scaleDisplay" class="scale-info"
+                                >Kein Maßstab</span
+                            >
+                            <button
+                                id="calibrateBtnSmall"
+                                class="btn-icon"
+                                title="Maßstab kalibrieren"
+                            >
+                                ✏️
+                            </button>
+                        </div>
+
+                        <!-- Calibration Panel -->
+                        <div
+                            id="calibrationPanel"
+                            class="calibration-panel"
+                            style="display: none"
+                        >
+                            <h4>Maßstab kalibrieren</h4>
+                            <p class="calibration-instructions">
+                                1. Klicken Sie auf Startpunkt<br />
+                                2. Klicken Sie auf Endpunkt<br />
+                                3. Geben Sie die echte Länge ein
+                            </p>
+                            <div id="calibrationMeasure" style="display: none">
+                                <label>
+                                    Länge dieser Linie:
+                                    <input
+                                        type="number"
+                                        id="calibrationLength"
+                                        step="0.01"
+                                        min="0.01"
+                                        placeholder="z.B. 3.25"
+                                    />
+                                    <select id="calibrationUnit">
+                                        <option value="m">Meter</option>
+                                        <option value="cm">Zentimeter</option>
+                                    </select>
+                                </label>
+                                <div
+                                    style="
+                                        display: flex;
+                                        gap: 0.5rem;
+                                        margin-top: 0.5rem;
+                                    "
+                                >
+                                    <button
+                                        id="applyCalibrationBtn"
+                                        class="btn"
+                                        style="flex: 1"
+                                    >
+                                        Übernehmen
+                                    </button>
+                                    <button
+                                        id="cancelCalibrationBtn"
+                                        class="btn btn-secondary"
+                                        style="flex: 1"
+                                    >
+                                        Abbrechen
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </main>
+            </div>
+        </div>
+
+        <script src="app.js"></script>
+        <script>
+            // Register service worker
+            if ("serviceWorker" in navigator) {
+                navigator.serviceWorker
+                    .register("sw.js")
+                    .then((reg) => console.log("Service Worker registered"))
+                    .catch((err) =>
+                        console.log("Service Worker registration failed"),
+                    );
+            }
+        </script>
+    </body>
+</html>
