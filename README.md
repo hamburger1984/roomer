@@ -8,13 +8,17 @@ Eine Offline-First-Webanwendung zum Einrichten von Möbeln auf Grundrissen (Floo
 - **Grundriss-Upload**: Unterstützt Bilder (PNG, JPG, etc.)
 - **Maßstab-Konfiguration**: Definieren Sie den Maßstab Ihres Grundrisses
 - **Möbelbibliothek**: Vorgefertigte Möbel mit realistischen Abmessungen
-  - Sitzgelegenheiten (Stühle, Sessel, Sofas)
-  - Tische (Couch-, Ess-, Schreibtische)
+  - Sitzgelegenheiten (Stühle, Sessel, Sofas, Eckbank, Schlafsofa)
+  - Tische (Couch-, Ess-, Schreibtische, runde Tische)
   - Schränke (Kleiderschränke, Sideboards, Regale)
   - Betten (Einzel-, Doppel-, Queen-Size)
+  - Geräte (Waschmaschine, Trockner, Geschirrspüler, Kühlschrank, Herd, Backofen)
+  - Dekoration (Pflanzen, TV, Lampen, Küchenschränke, Teppiche)
 - **Interaktive Platzierung**: Möbel per Drag & Drop platzieren
-- **Rotation**: Möbel frei drehen
+- **Rotation**: Möbel drehen mit 45°-Rasterung (Shift-Taste für freie Rotation)
+- **Rotations-Handle**: Visueller Griff zum Drehen von ausgewählten Möbeln
 - **Dimensionsanpassung**: Breite und Tiefe individuell anpassen
+- **Möbel umbenennen**: Individuelle Namen für Möbelstücke vergeben
 - **Zoom & Pan**: Grundriss zoomen und verschieben
 - **Datenpersistenz**: Automatisches Speichern in localStorage
 
@@ -40,13 +44,13 @@ Eine Offline-First-Webanwendung zum Einrichten von Möbeln auf Grundrissen (Floo
 - Der Grundriss wird auf dem Canvas angezeigt
 
 ### 2. Maßstab kalibrieren
-**Kalibrierung durch Linienzeichnung (empfohlen):**
-1. Klicken Sie auf "🖊️ Kalibrieren (Linie zeichnen)"
+**Kalibrierung durch Linienzeichnung:**
+1. Klicken Sie auf das ✏️ Symbol in der Toolbar (unten rechts)
 2. Klicken Sie auf einen Startpunkt einer bekannten Strecke im Grundriss
 3. Klicken Sie auf den Endpunkt derselben Strecke
 4. Geben Sie die echte Länge dieser Strecke ein (z.B. "3.25")
 5. Wählen Sie die Einheit (Meter oder Zentimeter)
-6. Klicken Sie auf "Kalibrierung übernehmen"
+6. Klicken Sie auf "Übernehmen"
 
 **Tipps für präzise Kalibrierung:**
 - Wählen Sie eine lange, gut sichtbare Strecke (z.B. Raumlänge)
@@ -66,17 +70,24 @@ Eine Offline-First-Webanwendung zum Einrichten von Möbeln auf Grundrissen (Floo
 
 ### 4. Möbel bearbeiten
 - **Verschieben**: Klicken und ziehen Sie das Möbelstück
-- **Auswählen**: Klicken Sie auf ein Möbel (blaue Umrandung = ausgewählt)
-- **Drehen**: Ändern Sie den Rotationswinkel in der Sidebar
+- **Auswählen**: Klicken Sie auf ein Möbel (magenta Umrandung = ausgewählt)
+- **Drehen**: 
+  - Klicken und ziehen Sie den magenta Rotations-Griff über dem Möbel, oder
+  - Ändern Sie den Rotationswinkel in der Sidebar
+  - Rotation rastet automatisch in 45°-Schritten ein
+  - Halten Sie die Shift-Taste für freie Rotation ohne Rasterung
 - **Größe anpassen**: Ändern Sie Breite und Tiefe in der Sidebar
+- **Umbenennen**: Ändern Sie den Namen in der Sidebar
 - **Löschen**: 
   - Drücken Sie die `Entf`/`Delete`-Taste, oder
   - Klicken Sie "Löschen" in der Sidebar
 
 **Visuelle Hinweise:**
-- **Blauer Pfeil**: Zeigt die "Vorderseite" des Möbels (Rotationsrichtung)
-- **Blaue Quadrate**: Markieren die vier Ecken (nur bei ausgewähltem Möbel)
+- **Magenta Umrandung**: Zeigt ausgewähltes Möbel
+- **Magenta Kreis**: Rotations-Griff zum Drehen (oberhalb des Möbels)
+- **Eck-Markierungen**: Kleine Quadrate an den vier Ecken (nur bei Auswahl)
 - **Maßangaben**: Breite (oben) und Tiefe (rechts) in cm (nur bei Auswahl)
+- **Gestrichelte Linie**: Zeigt erweiterte Größe bei ausklappbaren Möbeln (z.B. Schlafsofa)
 
 ### 5. Navigation & Zoom
 - **Pan/Verschieben**: Klicken und ziehen auf leerem Bereich
@@ -87,8 +98,12 @@ Eine Offline-First-Webanwendung zum Einrichten von Möbeln auf Grundrissen (Floo
 
 ### 6. Projekt verwalten
 - **Automatisches Speichern**: Änderungen werden sofort gespeichert (localStorage)
+- **Projektname**: Wird im Header angezeigt, kann mit ✏️ Symbol umbenannt werden
+- **Projekt schließen**: Schließt das aktuelle Projekt ohne Bestätigung (da auto-gespeichert)
+- **Gespeicherte Projekte**: Beim Start oder nach "Projekt schließen" werden alle gespeicherten Projekte angezeigt
+- **Projekt laden**: Klicken Sie auf ein Projekt in der Liste zum Laden
+- **Projekt löschen**: Klicken Sie auf "Löschen" neben einem Projekt
 - **Möbel zurücksetzen**: Entfernt alle Möbel, behält Grundriss und Kalibrierung
-- **Neues Projekt**: Löscht alles (Grundriss, Möbel, Kalibrierung)
 
 ## Technische Details
 

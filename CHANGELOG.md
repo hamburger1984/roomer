@@ -1,5 +1,63 @@
 # Changelog
 
+## Version 1.5 - Expanded Furniture Library & Decoration
+
+### Added
+- **Appliances Category**: Kitchen and laundry appliances
+  - Waschmaschine (washing machine), Trockner (dryer)
+  - Geschirrspüler (dishwasher), Kühlschrank (fridge)
+  - Herd (stove), Backofen (oven)
+- **Decoration Category**: Decorative items for room planning
+  - Pflanzen in 3 Größen (small, medium, large plants)
+  - TV (single size, wall-mountable)
+  - Lampen (floor and table lamps)
+  - Küchenschränke (wall-mounted and base cabinets)
+  - Teppiche in 3 Größen (small, medium, large rugs)
+
+### Changed
+- Reduced decoration items for simplicity (removed guitars, speakers; consolidated TV sizes)
+
+## Version 1.4 - Project Management & Rotation Improvements
+
+### Added
+- **Project Management System**: 
+  - Named projects with save/load/delete functionality
+  - Project list display with last modified timestamps
+  - Project name shown in header with ellipsis for long names
+  - Rename button (✏️) to change project names
+- **Interactive Rotation Handle**: Visual magenta circle above selected furniture for dragging to rotate
+- **45° Rotation Snapping**: Furniture rotation snaps to 45° increments
+  - Hold Shift key to disable snapping for free rotation
+- **Enhanced Furniture Library**:
+  - Eckbank (L-shaped corner bench) with configurable seat depth
+  - Schlafsofa (sleeper sofa) with expandable dimensions shown as dashed outline
+  - Round tables with circular shape rendering
+- **Furniture Renaming**: Name input field in properties panel
+
+### Changed
+- **UI Reorganization**:
+  - Moved zoom/pan toolbar from top-right to bottom-right corner
+  - Moved calibration controls to floating panel (activated by ✏️ button)
+  - Removed calibration section from left sidebar
+  - Upload overlay now centered until floor plan is loaded
+- **Button Labels**:
+  - "Neues Projekt" → "Projekt schließen" (no confirmation needed)
+  - "Speichern" button removed (auto-save is always active)
+  - Scale display shows current calibration next to zoom controls
+- **Visual Changes**:
+  - Selection color changed from blue (#3498db) to magenta (#FF1493)
+  - Removed rotation direction arrows from furniture
+- **Code Cleanup**:
+  - Renamed all German property names to English in code (sitzflaeche → seatDepth)
+  - Removed legacy `detectedScale` references
+  - Storage keys: `roomer-project` → `roomer-current-project` + `roomer-projects` list
+
+### Technical Improvements
+- Auto-save on every edit (furniture move, rotate, resize, add, delete)
+- Project storage with versioning support
+- Shape-based rendering system (rectangle, circle, L-shape, expandable)
+- Rotation handle with `Math.atan2()` angle calculation
+
 ## Version 1.3 - Simplified User Experience
 
 ### Removed
