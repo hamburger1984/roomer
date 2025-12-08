@@ -1,5 +1,34 @@
 # Changelog
 
+## Version 1.6 - Enhanced Sidebar & Improved Zoom (November 2025)
+
+### Added
+- **Translucent Auto-Hiding Sidebar**: 
+  - Sidebar now has translucent background with backdrop-filter blur effect (92% opacity)
+  - Pin/Unpin button (📌/📍) to toggle between persistent and auto-hide modes
+  - Hover trigger zone (20px) on left edge reveals sidebar when unpinned
+  - Smooth transitions (0.3s) for hide/show animations
+- **Dynamic Panel Switching**:
+  - When furniture selected: shows edit panel, hides furniture list
+  - When nothing selected: shows furniture list, hides edit panel
+- **Overlay Mode**: Sidebar floats over canvas instead of taking layout space
+  - Canvas expands to full width beneath sidebar
+  - Better use of screen space
+
+### Changed
+- **Zoom Behavior**: +/- buttons now zoom towards view center (instead of cursor position)
+  - Provides consistent, predictable zoom behavior
+  - Calculates viewport center, converts to canvas coordinates, adjusts pan after zoom
+- **Pin Button Position**: Moved outside sidebar container so it stays visible when sidebar is hidden
+  - Top margin added to first sidebar section to prevent overlap with pin button
+  - Better accessibility on touch devices
+
+### Fixed
+- Pin button visibility on touch devices when sidebar is hidden
+
+### Removed
+- Outdated CALIBRATION.md documentation file
+
 ## Version 1.5 - Expanded Furniture Library & Decoration
 
 ### Added

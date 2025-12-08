@@ -39,8 +39,8 @@ Eine Offline-First-Webanwendung zum Einrichten von Möbeln auf Grundrissen (Floo
 ## Verwendung
 
 ### 1. Grundriss hochladen
-- Klicken Sie auf das Upload-Feld in der Sidebar
-- Wählen Sie eine PDF- oder Bilddatei Ihres Grundrisses aus
+- Klicken Sie auf das Upload-Feld auf dem Start-Bildschirm
+- Wählen Sie eine PDF- oder Bilddatei Ihres Grundrisses aus (PNG, JPG, GIF, WebP, PDF)
 - Der Grundriss wird auf dem Canvas angezeigt
 
 ### 2. Maßstab kalibrieren
@@ -89,14 +89,19 @@ Eine Offline-First-Webanwendung zum Einrichten von Möbeln auf Grundrissen (Floo
 - **Maßangaben**: Breite (oben) und Tiefe (rechts) in cm (nur bei Auswahl)
 - **Gestrichelte Linie**: Zeigt erweiterte Größe bei ausklappbaren Möbeln (z.B. Schlafsofa)
 
-### 5. Navigation & Zoom
+### 5. Sidebar
+- **Pin/Unpin**: Klicken Sie auf das 📌/📍 Symbol, um die Sidebar permanent anzuzeigen oder automatisch auszublenden
+- **Automatisches Ausblenden**: Im unpinned Modus verschwindet die Sidebar automatisch beim Interagieren mit dem Canvas
+- **Overlay-Modus**: Die Sidebar überlagert den Canvas ohne dessen Größe zu beeinflussen
+
+### 6. Navigation & Zoom
 - **Pan/Verschieben**: Klicken und ziehen auf leerem Bereich
 - **Zoom**: Mausrad zum Zoomen (zoomt zur Mausposition)
-- **Zoom-Buttons**: +/- Buttons in der Toolbar
+- **Zoom-Buttons**: +/- Buttons in der Toolbar (unten rechts, zoomen zur Ansichtsmitte)
 - **Home-Button (⌂)**: Passt Ansicht an, um gesamten Grundriss zu zeigen
 - **Automatisches Fit**: Beim Laden wird der Grundriss automatisch angepasst
 
-### 6. Projekt verwalten
+### 7. Projekt verwalten
 - **Automatisches Speichern**: Änderungen werden sofort gespeichert (localStorage)
 - **Projektname**: Wird im Header angezeigt, kann mit ✏️ Symbol umbenannt werden
 - **Projekt schließen**: Schließt das aktuelle Projekt ohne Bestätigung (da auto-gespeichert)
@@ -114,9 +119,10 @@ Die App verwendet einen Service Worker (`sw.js`), der alle Ressourcen cacht:
 - Möbelanordnungen
 
 ### Datenspeicherung
-- **localStorage**: Speichert Projektdaten (Grundriss, Möbel, Kalibrierung)
-- Gespeichert werden: Grundriss-Bild, Möbelanordnungen, Pixel-pro-Meter-Wert
-- **IndexedDB**: Könnte für größere Projekte implementiert werden
+- **localStorage**: Speichert alle Projektdaten (Grundriss, Möbel, Kalibrierung)
+- Gespeichert werden: Grundriss-Bild, Möbelanordnungen, Pixel-pro-Meter-Wert, Projektname, Zeitstempel
+- Speicherkeys: `roomer-current-project` (aktuelles Projekt), `roomer-projects` (alle Projekte)
+- **IndexedDB**: Nicht implementiert (könnte für größere Projekte hinzugefügt werden)
 
 ### Browser-Kompatibilität
 - Chrome/Edge: ✓ Vollständig unterstützt
@@ -151,7 +157,6 @@ pixels = (160 cm / 100) * 100 px/m = 160 Pixel
 
 ## Zukünftige Erweiterungen
 
-- PDF-Unterstützung mit PDF.js
 - Exportfunktion (PNG, PDF, JSON)
 - Mehrere Räume/Etagen
 - Benutzerdefinierte Möbel
@@ -160,6 +165,7 @@ pixels = (160 cm / 100) * 100 px/m = 160 Pixel
 - Touch-Unterstützung für Tablets
 - Möbelgruppen
 - 3D-Vorschau
+- IndexedDB für größere Projekte (aktuell nur localStorage)
 
 ## Datenschutz
 
