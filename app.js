@@ -327,6 +327,10 @@ const state = {
   calibrationEnd: null,
   projectName: "Unbenanntes Projekt",
   sidebarPinned: true,
+  // Snapshot history management (graph-based)
+  snapshotGraph: [], // Array of snapshot nodes
+  currentSnapshotId: null, // ID of current snapshot
+  hasUnsavedChanges: false,
 };
 
 // Canvas and context
@@ -337,6 +341,296 @@ const ctx = canvas.getContext("2d");
 if (typeof pdfjsLib !== "undefined") {
   pdfjsLib.GlobalWorkerOptions.workerSrc =
     "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+}
+
+// ========== SNAPSHOT MANAGEMENT ==========
+
+// Generate unique ID for snapshots
+function generateSnapshotId() {
+  return (
+    "snapshot_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9)
+  );
+}
+
+// Find snapshot node by ID
+function findSnapshotById(id) {
+  return state.snapshotGraph.find((s) => s.id === id);
+}
+
+// Get all child snapshots of a given snapshot
+function getChildSnapshots(snapshotId) {
+  return state.snapshotGraph.filter((s) => s.parentId === snapshotId);
+}
+
+// Create a snapshot of the current state
+function createSnapshot(shouldFork = false) {
+  const snapshotId = generateSnapshotId();
+  const snapshot = {
+    id: snapshotId,
+    parentId: state.currentSnapshotId,
+    timestamp: Date.now(),
+    furniture: JSON.parse(JSON.stringify(state.furniture)),
+    zoom: state.zoom,
+    pan: { ...state.pan },
+    pixelsPerMeter: state.pixelsPerMeter,
+    floorPlan: state.floorPlan,
+  };
+
+  state.snapshotGraph.push(snapshot);
+  state.currentSnapshotId = snapshotId;
+  state.hasUnsavedChanges = false;
+  updateSnapshotUI();
+  renderSnapshotGraph();
+  saveProject();
+
+  return snapshot;
+}
+
+// Revert to a specific snapshot by ID
+function revertToSnapshot(snapshotId) {
+  const snapshot = findSnapshotById(snapshotId);
+  if (!snapshot) return;
+
+  // Restore state from snapshot
+  state.furniture = JSON.parse(JSON.stringify(snapshot.furniture));
+  state.zoom = snapshot.zoom;
+  state.pan = { ...snapshot.pan };
+  state.pixelsPerMeter = snapshot.pixelsPerMeter;
+  state.floorPlan = snapshot.floorPlan;
+
+  // Reload floor plan image if needed
+  if (snapshot.floorPlan) {
+    const img = new Image();
+    img.onload = () => {
+      state.floorPlanImage = img;
+      resizeCanvas();
+      fitToView();
+    };
+    img.src = snapshot.floorPlan;
+  }
+
+  state.currentSnapshotId = snapshotId;
+  state.selectedFurniture = null;
+  updateSelectedFurniturePanel();
+  updateSnapshotUI();
+  renderSnapshotGraph();
+  render();
+}
+
+// Check if we need to fork or abandon future snapshots
+function checkForFork() {
+  if (!state.currentSnapshotId) return false;
+
+  const children = getChildSnapshots(state.currentSnapshotId);
+  if (children.length > 0) {
+    // We're editing after reverting - there are already children
+    const message =
+      `Sie haben nach dem Zurücksetzen zu einem früheren Snapshot Änderungen vorgenommen.\n\n` +
+      `Es gibt ${children.length} neuere Snapshot(s).\n\n` +
+      `Möchten Sie:\n` +
+      `- "Abbrechen" drücken, um einen neuen Branch zu erstellen (Fork)\n` +
+      `- "OK" drücken, um die neueren Snapshots zu verwerfen`;
+
+    const abandon = confirm(message);
+
+    if (abandon) {
+      // Abandon future snapshots (remove all descendants)
+      removeDescendants(state.currentSnapshotId);
+    }
+    // If not abandoning, we'll create a fork (new branch alongside existing children)
+
+    return true;
+  }
+  return false;
+}
+
+// Remove all descendant snapshots recursively
+function removeDescendants(snapshotId) {
+  const children = getChildSnapshots(snapshotId);
+  children.forEach((child) => {
+    removeDescendants(child.id);
+    const index = state.snapshotGraph.findIndex((s) => s.id === child.id);
+    if (index >= 0) {
+      state.snapshotGraph.splice(index, 1);
+    }
+  });
+}
+
+// Delete a snapshot and its descendants
+function deleteSnapshot(snapshotId) {
+  const snapshot = findSnapshotById(snapshotId);
+  if (!snapshot) return;
+
+  // Confirm deletion
+  const hasChildren = getChildSnapshots(snapshotId).length > 0;
+  const message = hasChildren
+    ? "Diesen Snapshot und alle abhängigen Snapshots löschen?"
+    : "Diesen Snapshot löschen?";
+
+  if (!confirm(message)) return;
+
+  // If deleting current snapshot, navigate to parent first
+  if (state.currentSnapshotId === snapshotId) {
+    if (snapshot.parentId) {
+      revertToSnapshot(snapshot.parentId);
+    } else {
+      // Deleting root - clear current state
+      state.currentSnapshotId = null;
+    }
+  }
+
+  // Remove the snapshot and all its descendants
+  removeDescendants(snapshotId);
+  const index = state.snapshotGraph.findIndex((s) => s.id === snapshotId);
+  if (index >= 0) {
+    state.snapshotGraph.splice(index, 1);
+  }
+
+  // Update UI and save
+  renderSnapshotGraph();
+  saveProject();
+}
+
+// Update snapshot UI (simplified - no more navigation buttons)
+function updateSnapshotUI() {
+  // This function is kept for compatibility but navigation is now in the graph
+}
+
+// Mark that changes have been made (to trigger fork check)
+function markChanges() {
+  state.hasUnsavedChanges = true;
+  renderSnapshotGraph(); // Update graph to show unsaved changes indicator
+}
+
+// Render snapshot graph visualization
+function renderSnapshotGraph() {
+  const graphContainer = document.getElementById("snapshotGraphHeader");
+  if (!graphContainer) return;
+
+  // Clear if no snapshots
+  if (state.snapshotGraph.length === 0) {
+    graphContainer.innerHTML = "";
+    return;
+  }
+
+  // Build graph layout using level-based positioning
+  const layout = buildGraphLayout();
+
+  // Create HTML structure - simplified for header
+  let html = '<div class="snapshot-graph-container">';
+
+  // Render each column (level)
+  for (let level = 0; level < layout.levels.length; level++) {
+    const nodesAtLevel = layout.levels[level];
+
+    html += '<div class="snapshot-column">';
+
+    // Render nodes at this level
+    nodesAtLevel.forEach((node, rowIndex) => {
+      const isCurrent = node.id === state.currentSnapshotId;
+      const isRoot = !node.parentId;
+      const classes = ["snapshot-node"];
+      if (isCurrent) classes.push("current");
+      if (isRoot) classes.push("root");
+
+      const date = new Date(node.timestamp);
+      const timeStr = date.toLocaleTimeString("de-DE", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      const dateStr = date.toLocaleDateString("de-DE");
+
+      html += `<div class="${classes.join(" ")}" data-snapshot-id="${node.id}">`;
+      html += `<div class="snapshot-tooltip">${dateStr} ${timeStr}</div>`;
+      html += `<div class="snapshot-delete-btn" data-delete-id="${node.id}">×</div>`;
+      html += "</div>";
+    });
+
+    html += "</div>";
+
+    // Add connector between levels (prominent line)
+    if (level < layout.levels.length - 1) {
+      html +=
+        '<div style="width: 12px; height: 3px; background: rgba(52, 152, 219, 0.8); flex-shrink: 0; align-self: center; border-radius: 2px;"></div>';
+    }
+  }
+
+  // Add unsaved changes indicator if there are unsaved changes
+  if (state.hasUnsavedChanges && state.currentSnapshotId) {
+    html +=
+      '<div style="width: 12px; height: 3px; background: rgba(241, 196, 15, 0.8); border-style: dashed; border-width: 0 0 2px 0; border-color: rgba(241, 196, 15, 0.9); flex-shrink: 0; align-self: center;"></div>';
+    html +=
+      '<div class="snapshot-node unsaved-hint" title="Nicht gespeicherte Änderungen - Snapshot erstellen">?</div>';
+  }
+
+  html += "</div>";
+  graphContainer.innerHTML = html;
+
+  // Add click event listeners to nodes
+  const nodes = graphContainer.querySelectorAll(".snapshot-node");
+  nodes.forEach((node) => {
+    const snapshotId = node.getAttribute("data-snapshot-id");
+    node.addEventListener("click", (e) => {
+      // Don't navigate if clicking the delete button
+      if (e.target.classList.contains("snapshot-delete-btn")) {
+        return;
+      }
+      revertToSnapshot(snapshotId);
+    });
+  });
+
+  // Add click event listeners to delete buttons
+  const deleteButtons = graphContainer.querySelectorAll(".snapshot-delete-btn");
+  deleteButtons.forEach((btn) => {
+    const snapshotId = btn.getAttribute("data-delete-id");
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation(); // Prevent node click
+      deleteSnapshot(snapshotId);
+    });
+  });
+}
+
+// Build graph layout (organize nodes by level from left to right)
+function buildGraphLayout() {
+  const layout = { levels: [] };
+
+  // Find root nodes (nodes without parents)
+  const rootNodes = state.snapshotGraph.filter((s) => !s.parentId);
+
+  if (rootNodes.length === 0 && state.snapshotGraph.length > 0) {
+    // Fallback: if no root found, treat first as root
+    layout.levels.push([state.snapshotGraph[0]]);
+  } else {
+    layout.levels.push(rootNodes);
+  }
+
+  // Build subsequent levels using BFS
+  let currentLevel = 0;
+  const visited = new Set(layout.levels[0].map((n) => n.id));
+
+  while (currentLevel < layout.levels.length) {
+    const nextLevel = [];
+
+    layout.levels[currentLevel].forEach((node) => {
+      const children = getChildSnapshots(node.id);
+      children.forEach((child) => {
+        if (!visited.has(child.id)) {
+          nextLevel.push(child);
+          visited.add(child.id);
+        }
+      });
+    });
+
+    if (nextLevel.length > 0) {
+      // Sort by timestamp within level
+      nextLevel.sort((a, b) => a.timestamp - b.timestamp);
+      layout.levels.push(nextLevel);
+    }
+
+    currentLevel++;
+  }
+
+  return layout;
 }
 
 // Show/hide upload overlay
@@ -429,6 +723,8 @@ function init() {
   resizeCanvas();
   render();
   updateScaleDisplay();
+  updateSnapshotUI();
+  renderSnapshotGraph();
 
   // Show upload overlay if no floor plan loaded
   if (!state.floorPlanImage) {
@@ -506,14 +802,24 @@ function setupEventListeners() {
 
   // Project controls
   document
-    .getElementById("resetFurniture")
-    .addEventListener("click", resetFurniture);
-  document
     .getElementById("closeProject")
     .addEventListener("click", closeProject);
   document
     .getElementById("renameProject")
     .addEventListener("click", renameProject);
+
+  // Snapshot controls
+  document.getElementById("createSnapshot").addEventListener("click", () => {
+    if (checkForFork()) {
+      // After handling fork, create the snapshot
+      createSnapshot();
+    } else {
+      const snapshot = createSnapshot();
+      if (snapshot) {
+        alert("Snapshot erstellt!");
+      }
+    }
+  });
 
   // Sidebar controls
   const sidebar = document.getElementById("sidebar");
@@ -718,8 +1024,6 @@ async function handleFloorPlanUpload(e) {
     const img = new Image();
     img.onload = () => {
       state.floorPlanImage = img;
-      canvas.width = img.width;
-      canvas.height = img.height;
       hideUploadOverlay();
       resizeCanvas();
       fitToView();
@@ -765,12 +1069,15 @@ function resetView() {
 // Resize canvas to fit container
 function resizeCanvas() {
   const wrapper = document.getElementById("canvasWrapper");
+  // Make canvas fill the wrapper
+  canvas.width = wrapper.clientWidth;
+  canvas.height = wrapper.clientHeight;
+
+  // If we have a floor plan, fit it to view (which also calls render)
   if (state.floorPlanImage) {
-    canvas.style.width = state.floorPlanImage.width + "px";
-    canvas.style.height = state.floorPlanImage.height + "px";
+    fitToView();
   } else {
-    canvas.width = 1200;
-    canvas.height = 800;
+    render();
   }
 }
 
@@ -855,6 +1162,7 @@ function addFurniture(template) {
   // Deselect all other furniture and select the new one
   state.selectedFurniture = furniture;
   updateSelectedFurniturePanel();
+  markChanges();
   render();
   saveProject();
 }
@@ -1267,6 +1575,7 @@ function handleCanvasMouseMove(e) {
 function handleCanvasMouseUp() {
   if (state.isDragging) {
     state.isDragging = false;
+    markChanges();
     saveProject();
   }
   if (state.isPanning) {
@@ -1274,6 +1583,7 @@ function handleCanvasMouseUp() {
   }
   if (state.isRotating) {
     state.isRotating = false;
+    markChanges();
     saveProject();
   }
 }
@@ -1286,7 +1596,7 @@ function handleCanvasWheel(e) {
   const { x: mouseX, y: mouseY } = screenToCanvas(e.clientX, e.clientY);
 
   // Calculate zoom delta
-  const zoomDelta = e.deltaY > 0 ? -0.1 : 0.1;
+  const zoomDelta = e.deltaY > 0 ? -0.05 : 0.05;
   const newZoom = Math.max(0.1, Math.min(5, state.zoom + zoomDelta));
 
   if (newZoom !== state.zoom) {
@@ -1374,6 +1684,7 @@ function handleFurniturePropertyChange(e) {
     state.selectedFurniture.rotation = parseFloat(e.target.value) % 360;
   }
 
+  markChanges();
   render();
   saveProject();
 }
@@ -1387,6 +1698,7 @@ function deleteFurniture() {
   );
   state.selectedFurniture = null;
   updateSelectedFurniturePanel();
+  markChanges();
   render();
   saveProject();
 }
@@ -1408,6 +1720,8 @@ function saveProject() {
     floorPlan: state.floorPlan,
     pixelsPerMeter: state.pixelsPerMeter,
     furniture: state.furniture,
+    snapshotGraph: state.snapshotGraph,
+    currentSnapshotId: state.currentSnapshotId,
     lastModified: new Date().toISOString(),
   };
 
@@ -1462,6 +1776,12 @@ function loadProject() {
 
     state.pixelsPerMeter = project.pixelsPerMeter || null;
     state.furniture = project.furniture || [];
+    // Handle both old and new snapshot formats
+    state.snapshotGraph = project.snapshotGraph || [];
+    state.currentSnapshotId = project.currentSnapshotId || null;
+    state.hasUnsavedChanges = false;
+    updateSnapshotUI();
+    renderSnapshotGraph();
   } catch (e) {
     console.error("Error loading project:", e);
   }
@@ -1477,6 +1797,12 @@ function loadProjectByName(projectName) {
   updateProjectNameDisplay();
   state.pixelsPerMeter = project.pixelsPerMeter || null;
   state.furniture = project.furniture || [];
+  // Handle both old and new snapshot formats
+  state.snapshotGraph = project.snapshotGraph || [];
+  state.currentSnapshotId = project.currentSnapshotId || null;
+  state.hasUnsavedChanges = false;
+  updateSnapshotUI();
+  renderSnapshotGraph();
 
   if (project.floorPlan) {
     const img = new Image();
@@ -1495,17 +1821,6 @@ function loadProjectByName(projectName) {
   }
 
   localStorage.setItem("roomer-current-project", JSON.stringify(project));
-}
-
-// Reset furniture (keep floor plan)
-function resetFurniture() {
-  if (confirm("Alle Möbel entfernen?")) {
-    state.furniture = [];
-    state.selectedFurniture = null;
-    updateSelectedFurniturePanel();
-    render();
-    saveProject();
-  }
 }
 
 // Close project (no confirmation needed as we auto-save)

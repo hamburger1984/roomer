@@ -20,6 +20,7 @@ Eine Offline-First-Webanwendung zum Einrichten von Möbeln auf Grundrissen (Floo
 - **Dimensionsanpassung**: Breite und Tiefe individuell anpassen
 - **Möbel umbenennen**: Individuelle Namen für Möbelstücke vergeben
 - **Zoom & Pan**: Grundriss zoomen und verschieben
+- **Snapshot-System**: Versionskontrolle für Ihre Einrichtungsentwürfe mit visueller Timeline
 - **Datenpersistenz**: Automatisches Speichern in localStorage
 
 ## Installation
@@ -101,14 +102,70 @@ Eine Offline-First-Webanwendung zum Einrichten von Möbeln auf Grundrissen (Floo
 - **Home-Button (⌂)**: Passt Ansicht an, um gesamten Grundriss zu zeigen
 - **Automatisches Fit**: Beim Laden wird der Grundriss automatisch angepasst
 
-### 7. Projekt verwalten
+### 7. Snapshot-System (Versionskontrolle)
+
+Das Snapshot-System ermöglicht es Ihnen, verschiedene Versionen Ihrer Einrichtung zu speichern und zwischen ihnen zu wechseln - ähnlich wie Git für Code.
+
+**Snapshot erstellen:**
+- Klicken Sie auf das 📸 Symbol im Header
+- Ihr aktueller Zustand (Möbel, Positionen, Zoom, Pan) wird gespeichert
+- Der neue Snapshot erscheint in der visuellen Timeline
+
+**Visuelle Timeline (Graph):**
+- Befindet sich im Header zwischen "Projekt schließen" und 📸 Symbol
+- **Kompakter Modus**: Graph ist standardmäßig verkleinert und skaliert auf 70%
+- **Hover zum Erweitern**: Fahren Sie mit der Maus über den Graph, um ihn zu vergrößern
+- **Horizontale Timeline**: Snapshots werden von links nach rechts angeordnet
+- **Scrollbar**: Bei vielen Snapshots horizontal scrollbar
+
+**Graph-Elemente:**
+- 🟢 **Grüner Knoten**: Erster/Root-Snapshot
+- 🔵 **Blaue Knoten**: Normale Snapshots
+- 🔴 **Roter Knoten**: Aktueller Snapshot (pulsiert sanft)
+- 🟡 **Gelber "?" Knoten**: Nicht gespeicherte Änderungen (erscheint automatisch bei Bearbeitung)
+- **Verbindungslinien**: Blaue Linien zeigen die Verbindungen zwischen Snapshots
+- **Gestrichelte gelbe Linie**: Zeigt an, dass eine neue Version erstellt werden sollte
+
+**Navigation:**
+- **Klick auf Knoten**: Springt sofort zu diesem Snapshot
+- **Hover über Knoten**: Zeigt Datum und Uhrzeit der Erstellung
+- **Tooltip**: Erscheint automatisch beim Hovern
+
+**Snapshot löschen:**
+- Fahren Sie mit der Maus über einen Knoten
+- Klicken Sie auf das rote × Symbol (erscheint oben rechts)
+- **Bestätigung**: Bei Snapshots mit abhängigen Versionen erscheint eine Warnung
+- **Kaskadierendes Löschen**: Löscht auch alle abhängigen Child-Snapshots
+
+**Branching (Verzweigung):**
+- Springen Sie zu einem älteren Snapshot zurück
+- Nehmen Sie Änderungen vor
+- Beim Erstellen eines neuen Snapshots werden Sie gefragt:
+  - **"OK"**: Neuere Snapshots verwerfen (lineare Historie)
+  - **"Abbrechen"**: Neuen Branch erstellen (Fork)
+- Branches werden vertikal im Graph angezeigt
+
+**Unsaved Changes Indicator:**
+- Gelber "?" Knoten erscheint automatisch nach dem aktuellen Snapshot
+- Zeigt an, dass Sie Änderungen vorgenommen haben, die noch nicht gesichert sind
+- Verschwindet, wenn Sie einen neuen Snapshot erstellen
+- **Auslöser**: Möbel hinzufügen, löschen, verschieben, drehen, oder Eigenschaften ändern
+
+**Beispiel-Workflow:**
+1. Grundriss hochladen → 📸 Snapshot 1 (leerer Raum)
+2. Möbel platzieren → 📸 Snapshot 2 (erste Version)
+3. Umstellen → 📸 Snapshot 3 (zweite Version)
+4. Zu Snapshot 2 zurück → Änderungen → Fork erstellen → 📸 Snapshot 4 (alternative Version)
+5. Graph zeigt nun zwei Branches: 1→2→3 und 1→2→4
+
+### 8. Projekt verwalten
 - **Automatisches Speichern**: Änderungen werden sofort gespeichert (localStorage)
 - **Projektname**: Wird im Header angezeigt, kann mit ✏️ Symbol umbenannt werden
 - **Projekt schließen**: Schließt das aktuelle Projekt ohne Bestätigung (da auto-gespeichert)
 - **Gespeicherte Projekte**: Beim Start oder nach "Projekt schließen" werden alle gespeicherten Projekte angezeigt
 - **Projekt laden**: Klicken Sie auf ein Projekt in der Liste zum Laden
 - **Projekt löschen**: Klicken Sie auf "Löschen" neben einem Projekt
-- **Möbel zurücksetzen**: Entfernt alle Möbel, behält Grundriss und Kalibrierung
+- **Snapshot-Historie**: Wird mit dem Projekt gespeichert und wiederhergestellt
 
 ## Technische Details
 
@@ -161,11 +218,11 @@ pixels = (160 cm / 100) * 100 px/m = 160 Pixel
 - Mehrere Räume/Etagen
 - Benutzerdefinierte Möbel
 - Messlinien und Abstände
-- Undo/Redo-Funktionalität
 - Touch-Unterstützung für Tablets
 - Möbelgruppen
 - 3D-Vorschau
 - IndexedDB für größere Projekte (aktuell nur localStorage)
+- Snapshot-Annotationen (Notizen zu einzelnen Versionen)
 
 ## Datenschutz
 

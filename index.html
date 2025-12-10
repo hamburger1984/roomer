@@ -1,331 +1,363 @@
 <!doctype html>
 <html lang="de">
-    <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Roomer - Grundriss Planer</title>
-        <link rel="stylesheet" href="styles.css" />
-        <link rel="manifest" href="manifest.json" />
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    </head>
-    <body>
-        <div id="app">
-            <header>
-                <h1>Roomer - Grundriss Planer</h1>
-                <div class="header-controls">
-                    <button id="resetFurniture" class="btn btn-warning">
-                        Möbel zurücksetzen
-                    </button>
-                    <span
-                        id="projectNameDisplay"
-                        style="
-                            max-width: 200px;
-                            overflow: hidden;
-                            text-overflow: ellipsis;
-                            white-space: nowrap;
-                            padding: 0.5rem 1rem;
-                        "
-                        >Unbenanntes Projekt</span
-                    >
-                    <button
-                        id="renameProject"
-                        class="btn-icon"
-                        title="Projekt umbenennen"
-                    >
-                        ✏️
-                    </button>
-                    <button id="closeProject" class="btn">
-                        Projekt schließen
-                    </button>
-                </div>
-            </header>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Roomer - Grundriss Planer</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="manifest" href="manifest.json" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  </head>
+  <body>
+    <div id="app">
+      <header role="banner">
+        <h1>Roomer - Grundriss Planer</h1>
+        <div class="header-controls">
+          <div
+            id="snapshotGraphHeader"
+            class="snapshot-graph-header"
+            role="navigation"
+            aria-label="Snapshot Navigation"
+          ></div>
+          <button
+            id="createSnapshot"
+            class="btn-icon"
+            aria-label="Snapshot erstellen"
+          >
+            📸
+          </button>
+          <span
+            id="projectNameDisplay"
+            class="project-name-display"
+            aria-live="polite"
+            >Unbenanntes Projekt</span
+          >
+          <button
+            id="renameProject"
+            class="btn-icon"
+            aria-label="Projekt umbenennen"
+          >
+            ✏️
+          </button>
+          <button id="closeProject" class="btn" aria-label="Projekt schließen">
+            Projekt schließen
+          </button>
+        </div>
+      </header>
 
-            <div class="container">
-                <!-- Sidebar Hover Trigger -->
-                <div class="sidebar-hover-trigger"></div>
+      <div class="container">
+        <!-- Sidebar Hover Trigger -->
+        <div class="sidebar-hover-trigger"></div>
 
-                <!-- Sidebar Pin Button -->
+        <!-- Sidebar Pin Button -->
+        <button
+          class="sidebar-pin-btn"
+          id="sidebarPinBtn"
+          aria-label="Sidebar anheften"
+          aria-pressed="false"
+        >
+          📌
+        </button>
+
+        <!-- Sidebar -->
+        <aside
+          class="sidebar"
+          id="sidebar"
+          role="complementary"
+          aria-label="Möbel und Werkzeuge"
+        >
+          <section class="section" aria-labelledby="furniture-section-heading">
+            <h2 id="furniture-section-heading" class="sr-only">
+              Möbelkategorien
+            </h2>
+            <nav class="furniture-categories" aria-label="Möbelkategorien">
+              <button
+                class="category-btn active"
+                data-category="all"
+                aria-pressed="true"
+              >
+                Alle
+              </button>
+              <button
+                class="category-btn"
+                data-category="seating"
+                aria-pressed="false"
+              >
+                Sitzgelegenheiten
+              </button>
+              <button
+                class="category-btn"
+                data-category="tables"
+                aria-pressed="false"
+              >
+                Tische
+              </button>
+              <button
+                class="category-btn"
+                data-category="storage"
+                aria-pressed="false"
+              >
+                Schränke
+              </button>
+              <button
+                class="category-btn"
+                data-category="beds"
+                aria-pressed="false"
+              >
+                Betten
+              </button>
+              <button
+                class="category-btn"
+                data-category="appliances"
+                aria-pressed="false"
+              >
+                Geräte
+              </button>
+              <button
+                class="category-btn"
+                data-category="decoration"
+                aria-pressed="false"
+              >
+                Dekoration
+              </button>
+            </nav>
+            <div id="furnitureList" class="furniture-list" role="list"></div>
+          </section>
+
+          <section
+            class="section panel-hidden"
+            id="selectedFurniturePanel"
+            aria-labelledby="furniture-properties-heading"
+          >
+            <h2 id="furniture-properties-heading" class="sr-only">
+              Möbeleigenschaften
+            </h2>
+            <form
+              class="furniture-properties"
+              aria-label="Möbeleigenschaften bearbeiten"
+            >
+              <label>
+                Name:
+                <input type="text" id="furnitureName" aria-label="Möbelname" />
+              </label>
+              <label>
+                Breite (cm):
+                <input
+                  type="number"
+                  id="furnitureWidth"
+                  step="1"
+                  min="1"
+                  aria-label="Breite in Zentimetern"
+                />
+              </label>
+              <label>
+                Tiefe (cm):
+                <input
+                  type="number"
+                  id="furnitureDepth"
+                  step="1"
+                  min="1"
+                  aria-label="Tiefe in Zentimetern"
+                />
+              </label>
+              <label id="seatDepthLabel" class="property-label-hidden">
+                Sitzfläche (cm):
+                <input
+                  type="number"
+                  id="furnitureSeatDepth"
+                  step="1"
+                  min="1"
+                  aria-label="Sitzflächentiefe in Zentimetern"
+                />
+              </label>
+              <label id="expandedWidthLabel" class="property-label-hidden">
+                Breite ausgeklappt (cm):
+                <input
+                  type="number"
+                  id="furnitureExpandedWidth"
+                  step="1"
+                  min="1"
+                  aria-label="Breite ausgeklappt in Zentimetern"
+                />
+              </label>
+              <label id="expandedDepthLabel" class="property-label-hidden">
+                Tiefe ausgeklappt (cm):
+                <input
+                  type="number"
+                  id="furnitureExpandedDepth"
+                  step="1"
+                  min="1"
+                  aria-label="Tiefe ausgeklappt in Zentimetern"
+                />
+              </label>
+              <label>
+                Rotation (°):
+                <input
+                  type="number"
+                  id="furnitureRotation"
+                  step="1"
+                  min="0"
+                  max="359"
+                  aria-label="Rotation in Grad"
+                />
+              </label>
+              <button
+                id="deleteFurniture"
+                class="btn btn-danger"
+                type="button"
+                aria-label="Möbel löschen"
+              >
+                Löschen
+              </button>
+            </form>
+          </section>
+        </aside>
+
+        <!-- Main Canvas Area -->
+        <main
+          class="canvas-container"
+          role="main"
+          aria-label="Grundriss-Arbeitsbereich"
+        >
+          <div id="canvasWrapper" class="canvas-wrapper">
+            <canvas id="mainCanvas" aria-label="Grundriss-Canvas"></canvas>
+            <div
+              id="uploadOverlay"
+              class="upload-overlay"
+              role="dialog"
+              aria-labelledby="upload-dialog-title"
+            >
+              <div class="upload-box">
+                <h2 id="upload-dialog-title">Neues Projekt</h2>
+                <p>Grundriss hochladen</p>
+                <input
+                  type="file"
+                  id="floorPlanUpload"
+                  accept="image/*,.pdf"
+                  class="panel-hidden"
+                  aria-label="Grundriss-Datei auswählen"
+                />
+                <input
+                  type="text"
+                  id="projectNameInput"
+                  placeholder="Projektname"
+                  class="project-name-input"
+                  aria-label="Projektname eingeben"
+                />
                 <button
-                    class="sidebar-pin-btn"
-                    id="sidebarPinBtn"
-                    title="Sidebar anheften"
+                  id="uploadBtn"
+                  class="btn upload-btn-sized"
+                  aria-label="Datei für Grundriss auswählen"
                 >
-                    📌
+                  📁 Datei auswählen
                 </button>
 
-                <!-- Sidebar -->
-                <aside class="sidebar" id="sidebar">
-                    <div class="section">
-                        <div class="furniture-categories">
-                            <button
-                                class="category-btn active"
-                                data-category="all"
-                            >
-                                Alle
-                            </button>
-                            <button
-                                class="category-btn"
-                                data-category="seating"
-                            >
-                                Sitzgelegenheiten
-                            </button>
-                            <button class="category-btn" data-category="tables">
-                                Tische
-                            </button>
-                            <button
-                                class="category-btn"
-                                data-category="storage"
-                            >
-                                Schränke
-                            </button>
-                            <button class="category-btn" data-category="beds">
-                                Betten
-                            </button>
-                            <button
-                                class="category-btn"
-                                data-category="appliances"
-                            >
-                                Geräte
-                            </button>
-                            <button
-                                class="category-btn"
-                                data-category="decoration"
-                            >
-                                Dekoration
-                            </button>
-                        </div>
-                        <div id="furnitureList" class="furniture-list"></div>
-                    </div>
-
-                    <div
-                        class="section"
-                        id="selectedFurniturePanel"
-                        style="display: none"
-                    >
-                        <div class="furniture-properties">
-                            <label>
-                                Name:
-                                <input type="text" id="furnitureName" />
-                            </label>
-                            <label>
-                                Breite (cm):
-                                <input
-                                    type="number"
-                                    id="furnitureWidth"
-                                    step="1"
-                                    min="1"
-                                />
-                            </label>
-                            <label>
-                                Tiefe (cm):
-                                <input
-                                    type="number"
-                                    id="furnitureDepth"
-                                    step="1"
-                                    min="1"
-                                />
-                            </label>
-                            <label id="seatDepthLabel" style="display: none">
-                                Sitzfläche (cm):
-                                <input
-                                    type="number"
-                                    id="furnitureSeatDepth"
-                                    step="1"
-                                    min="1"
-                                />
-                            </label>
-                            <label
-                                id="expandedWidthLabel"
-                                style="display: none"
-                            >
-                                Breite ausgeklappt (cm):
-                                <input
-                                    type="number"
-                                    id="furnitureExpandedWidth"
-                                    step="1"
-                                    min="1"
-                                />
-                            </label>
-                            <label
-                                id="expandedDepthLabel"
-                                style="display: none"
-                            >
-                                Tiefe ausgeklappt (cm):
-                                <input
-                                    type="number"
-                                    id="furnitureExpandedDepth"
-                                    step="1"
-                                    min="1"
-                                />
-                            </label>
-                            <label>
-                                Rotation (°):
-                                <input
-                                    type="number"
-                                    id="furnitureRotation"
-                                    step="1"
-                                    min="0"
-                                    max="359"
-                                />
-                            </label>
-                            <button id="deleteFurniture" class="btn btn-danger">
-                                Löschen
-                            </button>
-                        </div>
-                    </div>
-                </aside>
-
-                <!-- Main Canvas Area -->
-                <main class="canvas-container">
-                    <div id="canvasWrapper" class="canvas-wrapper">
-                        <canvas id="mainCanvas"></canvas>
-                        <div id="uploadOverlay" class="upload-overlay">
-                            <div class="upload-box">
-                                <h2>Neues Projekt</h2>
-                                <p>Grundriss hochladen</p>
-                                <input
-                                    type="file"
-                                    id="floorPlanUpload"
-                                    accept="image/*,.pdf"
-                                    style="display: none"
-                                />
-                                <input
-                                    type="text"
-                                    id="projectNameInput"
-                                    placeholder="Projektname"
-                                    style="
-                                        width: 100%;
-                                        padding: 0.75rem;
-                                        margin-bottom: 1rem;
-                                        border: 1px solid #ddd;
-                                        border-radius: 4px;
-                                        font-size: 1rem;
-                                    "
-                                />
-                                <button
-                                    id="uploadBtn"
-                                    class="btn"
-                                    style="
-                                        font-size: 1.2rem;
-                                        padding: 1rem 2rem;
-                                        width: 100%;
-                                    "
-                                >
-                                    📁 Datei auswählen
-                                </button>
-
-                                <div
-                                    style="
-                                        margin-top: 2rem;
-                                        padding-top: 2rem;
-                                        border-top: 1px solid #ddd;
-                                    "
-                                >
-                                    <h3
-                                        style="
-                                            margin-bottom: 1rem;
-                                            font-size: 1.1rem;
-                                        "
-                                    >
-                                        Gespeicherte Projekte
-                                    </h3>
-                                    <div
-                                        id="projectList"
-                                        style="
-                                            max-height: 300px;
-                                            overflow-y: auto;
-                                        "
-                                    ></div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Bottom Right Toolbar -->
-                        <div class="canvas-controls">
-                            <button id="zoomIn" class="btn-icon">+</button>
-                            <button id="zoomOut" class="btn-icon">-</button>
-                            <button id="resetView" class="btn-icon">⌂</button>
-                            <span id="zoomLevel">100%</span>
-                            <span class="scale-separator">|</span>
-                            <span id="scaleDisplay" class="scale-info"
-                                >Kein Maßstab</span
-                            >
-                            <button
-                                id="calibrateBtnSmall"
-                                class="btn-icon"
-                                title="Maßstab kalibrieren"
-                            >
-                                ✏️
-                            </button>
-                        </div>
-
-                        <!-- Calibration Panel -->
-                        <div
-                            id="calibrationPanel"
-                            class="calibration-panel"
-                            style="display: none"
-                        >
-                            <h4>Maßstab kalibrieren</h4>
-                            <p class="calibration-instructions">
-                                1. Klicken Sie auf Startpunkt<br />
-                                2. Klicken Sie auf Endpunkt<br />
-                                3. Geben Sie die echte Länge ein
-                            </p>
-                            <div id="calibrationMeasure" style="display: none">
-                                <label>
-                                    Länge dieser Linie:
-                                    <input
-                                        type="number"
-                                        id="calibrationLength"
-                                        step="0.01"
-                                        min="0.01"
-                                        placeholder="z.B. 3.25"
-                                    />
-                                    <select id="calibrationUnit">
-                                        <option value="m">Meter</option>
-                                        <option value="cm">Zentimeter</option>
-                                    </select>
-                                </label>
-                                <div
-                                    style="
-                                        display: flex;
-                                        gap: 0.5rem;
-                                        margin-top: 0.5rem;
-                                    "
-                                >
-                                    <button
-                                        id="applyCalibrationBtn"
-                                        class="btn"
-                                        style="flex: 1"
-                                    >
-                                        Übernehmen
-                                    </button>
-                                    <button
-                                        id="cancelCalibrationBtn"
-                                        class="btn btn-secondary"
-                                        style="flex: 1"
-                                    >
-                                        Abbrechen
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </main>
+                <section
+                  class="project-list-section"
+                  aria-labelledby="saved-projects-heading"
+                >
+                  <h3 id="saved-projects-heading">Gespeicherte Projekte</h3>
+                  <div
+                    id="projectList"
+                    class="project-list-container"
+                    role="list"
+                  ></div>
+                </section>
+              </div>
             </div>
-        </div>
 
-        <script src="app.js"></script>
-        <script>
-            // Register service worker
-            if ("serviceWorker" in navigator) {
-                navigator.serviceWorker
-                    .register("sw.js")
-                    .then((reg) => console.log("Service Worker registered"))
-                    .catch((err) =>
-                        console.log("Service Worker registration failed"),
-                    );
-            }
-        </script>
-    </body>
+            <!-- Bottom Right Toolbar -->
+            <nav class="canvas-controls" aria-label="Ansichtssteuerung">
+              <button id="zoomIn" class="btn-icon" aria-label="Hineinzoomen">
+                +
+              </button>
+              <button id="zoomOut" class="btn-icon" aria-label="Herauszoomen">
+                -
+              </button>
+              <button
+                id="resetView"
+                class="btn-icon"
+                aria-label="Ansicht zurücksetzen"
+              >
+                ⌂
+              </button>
+              <span id="zoomLevel" aria-live="polite" aria-label="Zoomstufe"
+                >100%</span
+              >
+              <span class="scale-separator" aria-hidden="true">|</span>
+              <span id="scaleDisplay" class="scale-info" aria-live="polite"
+                >Kein Maßstab</span
+              >
+              <button
+                id="calibrateBtnSmall"
+                class="btn-icon"
+                aria-label="Maßstab kalibrieren"
+              >
+                ✏️
+              </button>
+            </nav>
+
+            <!-- Calibration Panel -->
+            <aside
+              id="calibrationPanel"
+              class="calibration-panel panel-hidden"
+              role="dialog"
+              aria-labelledby="calibration-panel-title"
+            >
+              <h4 id="calibration-panel-title">Maßstab kalibrieren</h4>
+              <p class="calibration-instructions">
+                1. Klicken Sie auf Startpunkt<br />
+                2. Klicken Sie auf Endpunkt<br />
+                3. Geben Sie die echte Länge ein
+              </p>
+              <div id="calibrationMeasure" class="panel-hidden">
+                <label>
+                  Länge dieser Linie:
+                  <input
+                    type="number"
+                    id="calibrationLength"
+                    step="0.01"
+                    min="0.01"
+                    placeholder="z.B. 3.25"
+                    aria-label="Länge der Referenzlinie"
+                  />
+                  <select id="calibrationUnit" aria-label="Maßeinheit">
+                    <option value="m">Meter</option>
+                    <option value="cm">Zentimeter</option>
+                  </select>
+                </label>
+                <div class="calibration-controls">
+                  <button
+                    id="applyCalibrationBtn"
+                    class="btn"
+                    aria-label="Kalibrierung übernehmen"
+                  >
+                    Übernehmen
+                  </button>
+                  <button
+                    id="cancelCalibrationBtn"
+                    class="btn btn-secondary"
+                    aria-label="Kalibrierung abbrechen"
+                  >
+                    Abbrechen
+                  </button>
+                </div>
+              </div>
+            </aside>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <script src="app.js"></script>
+    <script>
+      // Register service worker
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker
+          .register("sw.js")
+          .then((reg) => console.log("Service Worker registered"))
+          .catch((err) => console.log("Service Worker registration failed"));
+      }
+    </script>
+  </body>
 </html>

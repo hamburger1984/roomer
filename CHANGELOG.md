@@ -1,5 +1,73 @@
 # Changelog
 
+## Version 1.7 - Snapshot System & Code Quality (December 2025)
+
+### Added
+- **Snapshot System (Version Control)**:
+  - Graph-based snapshot system for tracking furniture layout versions
+  - Visual timeline in header with interactive node graph
+  - Click nodes to instantly revert to previous states
+  - Create snapshots with 📸 button
+  - Branching support (fork history when editing after revert)
+  - Delete snapshots with confirmation dialog
+  - Cascade delete of child snapshots
+  - Hover tooltips showing timestamp for each snapshot
+  - Compact/expanded graph modes (70% scale, expands on hover)
+  - Horizontal scrollable timeline
+- **Unsaved Changes Indicator**:
+  - Yellow "?" node appears automatically when editing
+  - Dashed yellow line connects to current snapshot
+  - Pulsing animation to draw attention
+  - Automatically cleared when snapshot created
+- **Visual Enhancements**:
+  - Green nodes for root/first snapshots
+  - Blue nodes for regular snapshots
+  - Red pulsing nodes for current snapshot
+  - Prominent blue connection lines between snapshots
+  - Delete button (×) appears on hover over nodes
+- **CSS Variables System**:
+  - Centralized color, spacing, shadow, and transition definitions
+  - Improved maintainability and consistency
+  - Easy theming support for future dark mode
+
+### Changed
+- **Removed Reset Furniture Button**: Use snapshots for reverting changes instead
+- **Improved Zoom Speed**: Reduced mouse wheel zoom delta from 0.1 to 0.05 for smoother control
+- **Canvas Rendering**: Canvas now fills full viewport width regardless of sidebar state
+- **Code Quality**:
+  - Replaced 73 hardcoded colors with CSS variables
+  - Replaced 60+ spacing values with standardized variables
+  - Replaced 35 border-radius values with variables
+  - Unified shadow and transition values
+- **Accessibility**:
+  - All inline styles moved to CSS classes
+  - Added ARIA labels and roles throughout
+  - Semantic HTML5 elements (nav, section, form, aside)
+  - Screen reader support with live regions
+  - Hidden headings for better document structure
+
+### Removed
+- `goToPreviousSnapshot()` function (replaced by click navigation)
+- `goToNextSnapshot()` function (replaced by click navigation)
+- `resetFurniture()` function (replaced by snapshot system)
+- Snapshot navigation buttons (← →) from header
+- Inline styles from HTML markup
+
+### Technical Improvements
+- Graph-based snapshot data structure with parent-child relationships
+- Breadth-first search algorithm for graph layout
+- Efficient descendant removal for cascade delete
+- localStorage persistence of complete snapshot graph
+- Auto-rendering of graph on state changes
+- Backward compatible snapshot loading (handles old format)
+
+### UI/UX Improvements
+- Hover buffer zone around graph prevents flickering
+- Smooth transitions for graph expansion
+- Visual feedback for all interactive elements
+- Tooltip positioning optimized for header placement
+- Connection lines for better visual flow understanding
+
 ## Version 1.6 - Enhanced Sidebar & Improved Zoom (November 2025)
 
 ### Added
