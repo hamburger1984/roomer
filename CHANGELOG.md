@@ -1,5 +1,70 @@
 # Changelog
 
+## Version 1.8 - Export/Import, Crop, and Undo/Redo (December 2025)
+
+### Added
+- **Undo/Redo System**:
+  - Keyboard shortcuts: Ctrl+Z / Cmd+Z (undo), Ctrl+Y / Cmd+Y / Ctrl+Shift+Z (redo)
+  - Toolbar buttons (↶ ↷) in canvas controls
+  - History stack limited to 50 steps
+  - Smart property editing: single undo entry per edit session (not per keystroke)
+  - Auto-enable/disable buttons based on available history
+  - Tracks: furniture add/delete, drag, rotate, property changes
+- **Project Export**:
+  - Export button (💾) in header controls
+  - Downloads as `{ProjectName}.roomer.json` file
+  - Includes all data: floor plan (base64), furniture, snapshots, calibration
+  - JSON format with exportVersion field for future compatibility
+  - Formatted JSON (indented) for readability
+- **Project Import**:
+  - Import button (📂) in header controls
+  - Accepts `.json` and `.roomer.json` files
+  - Automatic name conflict resolution: appends (1), (2), etc. to duplicate names
+  - Validation of project structure with error messages
+  - Auto-loads imported project immediately
+  - Preserves all snapshots and history
+- **Floor Plan Crop Tool**:
+  - Crop button (✂️) in canvas controls toolbar
+  - Interactive rectangle selection with drag
+  - Visual feedback:
+    - Semi-transparent dark overlay outside selection
+    - Blue dashed border around selected area
+    - Live dimension display (width × height in pixels)
+  - Crop panel with confirm/cancel buttons
+  - Automatic adjustments after crop:
+    - Furniture positions translated to new origin
+    - Calibration points updated (if set)
+  - Undo support for crop operations
+  - Minimum size validation (10×10 pixels)
+  - Canvas refit after cropping
+
+### Changed
+- **Text Rendering**: Added `lineJoin: "round"` and `miterLimit: 2` to prevent spikes on letters M, N, W
+- **Furniture Borders**: Changed to rounded corners (radius 1.5px) for softer appearance
+- **L-shaped Furniture**: Complete path rewrite with proper `arcTo` usage for smooth rounded corners
+- **Snapshot Creation**: Removed alert popup after creating snapshot (visual graph feedback is sufficient)
+
+### Fixed
+- L-shaped furniture spike artifact on one corner (incorrect path drawing order)
+- Text rendering artifacts on sharp letter corners
+- Border rendering for all furniture types now uses consistent radius
+
+### Technical Improvements
+- Blob creation for file downloads
+- FileReader API for file uploads
+- Canvas `getImageData()` and temporary canvas for cropping
+- Coordinate transformation for position adjustments after crop
+- Smart undo state tracking prevents duplicate entries during continuous editing
+- Property edit session detection with focus/blur events
+
+### UI/UX Improvements
+- Export/import seamlessly integrated in header workflow
+- Crop mode with crosshair cursor for precision
+- Real-time crop preview with overlay
+- Dimension feedback during selection
+- Error handling with user-friendly German messages
+- All features work with existing snapshot and undo systems
+
 ## Version 1.7 - Snapshot System & Code Quality (December 2025)
 
 ### Added

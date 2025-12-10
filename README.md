@@ -21,6 +21,9 @@ Eine Offline-First-Webanwendung zum Einrichten von Möbeln auf Grundrissen (Floo
 - **Möbel umbenennen**: Individuelle Namen für Möbelstücke vergeben
 - **Zoom & Pan**: Grundriss zoomen und verschieben
 - **Snapshot-System**: Versionskontrolle für Ihre Einrichtungsentwürfe mit visueller Timeline
+- **Undo/Redo**: Rückgängig machen und Wiederherstellen von Änderungen (Strg+Z / Strg+Y)
+- **Export/Import**: Projekte als .roomer.json Dateien exportieren und importieren
+- **Zuschneiden**: Grundriss auf gewünschten Bereich zuschneiden
 - **Datenpersistenz**: Automatisches Speichern in localStorage
 
 ## Installation
@@ -158,9 +161,71 @@ Das Snapshot-System ermöglicht es Ihnen, verschiedene Versionen Ihrer Einrichtu
 4. Zu Snapshot 2 zurück → Änderungen → Fork erstellen → 📸 Snapshot 4 (alternative Version)
 5. Graph zeigt nun zwei Branches: 1→2→3 und 1→2→4
 
-### 8. Projekt verwalten
+### 8. Undo/Redo
+- **Rückgängig**: Strg+Z (Windows/Linux) oder Cmd+Z (Mac) oder ↶ Button
+- **Wiederherstellen**: Strg+Y oder Strg+Shift+Z (Windows/Linux) oder Cmd+Y oder Cmd+Shift+Z (Mac) oder ↷ Button
+- **Verlauf**: Bis zu 50 Schritte werden gespeichert
+- **Unterstützte Aktionen**: Möbel hinzufügen, löschen, verschieben, drehen, Eigenschaften ändern
+- **Intelligente Gruppierung**: Beim Bearbeiten von Eigenschaften wird nur ein Undo-Schritt pro Bearbeitungssitzung erstellt
+- **Buttons**: Werden automatisch aktiviert/deaktiviert je nach verfügbarem Verlauf
+
+### 9. Export/Import
+**Projekt exportieren:**
+- Klicken Sie auf das 💾 Symbol im Header
+- Datei wird als `{Projektname}.roomer.json` heruntergeladen
+- Enthält: Grundriss, Möbel, Snapshots, Kalibrierung, alle Einstellungen
+- Format: JSON (kann mit Texteditor geöffnet werden)
+
+**Projekt importieren:**
+- Klicken Sie auf das 📂 Symbol im Header
+- Wählen Sie eine `.roomer.json` Datei aus
+- **Automatische Namenskonflikte-Behandlung**: Bei gleichen Projektnamen wird automatisch (1), (2), etc. angehängt
+- Projekt wird automatisch geladen nach Import
+- Fehlerhafte Dateien werden mit Fehlermeldung abgelehnt
+
+**Anwendungsfälle:**
+- Projekte zwischen Browsern/Geräten übertragen
+- Projekte mit anderen Personen teilen
+- Backup-Kopien erstellen
+- Archivierung außerhalb des Browsers
+
+### 10. Grundriss zuschneiden
+**Zuschneiden aktivieren:**
+- Klicken Sie auf das ✂️ Symbol in der Canvas-Toolbar (unten rechts)
+- Cursor wird zum Fadenkreuz
+
+**Bereich auswählen:**
+- Klicken und ziehen Sie, um ein Rechteck zu zeichnen
+- **Visuelle Hilfen**:
+  - Dunkler Overlay außerhalb der Auswahl
+  - Blaue gestrichelte Linie um die Auswahl
+  - Live-Dimensionsanzeige in Pixeln
+- Crop-Panel zeigt ausgewählte Größe an
+
+**Zuschneiden anwenden:**
+- Klicken Sie "Zuschneiden" im Crop-Panel
+- **Automatische Anpassungen**:
+  - Grundriss wird auf ausgewählten Bereich zugeschnitten
+  - Möbelpositionen werden entsprechend verschoben
+  - Kalibrierungspunkte werden angepasst (falls vorhanden)
+- **Undo-Unterstützung**: Zuschneiden kann rückgängig gemacht werden
+- **Validierung**: Mindestgröße 10×10 Pixel
+
+**Abbrechen:**
+- Klicken Sie "Abbrechen" oder drücken Sie ESC
+- Auswahl wird verworfen, keine Änderungen
+
+**Anwendungsfälle:**
+- Entfernen von unnötigen Bereichen aus gescannten Dokumenten
+- Fokus auf einzelnen Raum in Gesamtgrundriss
+- Reduzierung der Dateigröße
+- Verbesserung der Übersichtlichkeit
+
+### 11. Projekt verwalten
 - **Automatisches Speichern**: Änderungen werden sofort gespeichert (localStorage)
 - **Projektname**: Wird im Header angezeigt, kann mit ✏️ Symbol umbenannt werden
+- **Projekt exportieren**: 💾 Symbol zum Download als .roomer.json Datei
+- **Projekt importieren**: 📂 Symbol zum Laden von .roomer.json Dateien
 - **Projekt schließen**: Schließt das aktuelle Projekt ohne Bestätigung (da auto-gespeichert)
 - **Gespeicherte Projekte**: Beim Start oder nach "Projekt schließen" werden alle gespeicherten Projekte angezeigt
 - **Projekt laden**: Klicken Sie auf ein Projekt in der Liste zum Laden
@@ -214,7 +279,7 @@ pixels = (160 cm / 100) * 100 px/m = 160 Pixel
 
 ## Zukünftige Erweiterungen
 
-- Exportfunktion (PNG, PDF, JSON)
+- PNG/PDF Export (Rendering des Grundrisses)
 - Mehrere Räume/Etagen
 - Benutzerdefinierte Möbel
 - Messlinien und Abstände
