@@ -331,6 +331,10 @@ const state = {
   snapshotGraph: [], // Array of snapshot nodes
   currentSnapshotId: null, // ID of current snapshot
   hasUnsavedChanges: false,
+  // Undo/Redo management
+  undoStack: [], // Stack of previous states
+  redoStack: [], // Stack of undone states
+  propertyEditInProgress: false, // Track if property is being edited
 };
 
 // Canvas and context
@@ -633,6 +637,112 @@ function buildGraphLayout() {
   return layout;
 }
 
+// ========== UNDO/REDO MANAGEMENT ==========
+
+// Push current state to undo stack (before making changes)
+function pushUndoState() {
+  // Create a snapshot of the current furniture state
+  const currentState = {
+    furniture: JSON.parse(JSON.stringify(state.furniture)),
+    selectedFurniture: state.selectedFurniture
+      ? state.furniture.indexOf(state.selectedFurniture)
+      : null,
+  };
+
+  state.undoStack.push(currentState);
+
+  // Limit undo stack size to 50 steps
+  if (state.undoStack.length > 50) {
+    state.undoStack.shift();
+  }
+
+  // Clear redo stack when a new action is performed
+  state.redoStack = [];
+
+  updateUndoRedoButtons();
+}
+
+// Undo the last action
+function undo() {
+  if (state.undoStack.length === 0) return;
+
+  // Push current state to redo stack
+  const currentState = {
+    furniture: JSON.parse(JSON.stringify(state.furniture)),
+    selectedFurniture: state.selectedFurniture
+      ? state.furniture.indexOf(state.selectedFurniture)
+      : null,
+  };
+  state.redoStack.push(currentState);
+
+  // Pop state from undo stack and restore it
+  const previousState = state.undoStack.pop();
+  state.furniture = JSON.parse(JSON.stringify(previousState.furniture));
+
+  // Restore selected furniture
+  if (
+    previousState.selectedFurniture !== null &&
+    previousState.selectedFurniture < state.furniture.length
+  ) {
+    state.selectedFurniture = state.furniture[previousState.selectedFurniture];
+  } else {
+    state.selectedFurniture = null;
+  }
+
+  updateSelectedFurniturePanel();
+  updateUndoRedoButtons();
+  markChanges();
+  render();
+  saveProject();
+}
+
+// Redo the last undone action
+function redo() {
+  if (state.redoStack.length === 0) return;
+
+  // Push current state to undo stack
+  const currentState = {
+    furniture: JSON.parse(JSON.stringify(state.furniture)),
+    selectedFurniture: state.selectedFurniture
+      ? state.furniture.indexOf(state.selectedFurniture)
+      : null,
+  };
+  state.undoStack.push(currentState);
+
+  // Pop state from redo stack and restore it
+  const nextState = state.redoStack.pop();
+  state.furniture = JSON.parse(JSON.stringify(nextState.furniture));
+
+  // Restore selected furniture
+  if (
+    nextState.selectedFurniture !== null &&
+    nextState.selectedFurniture < state.furniture.length
+  ) {
+    state.selectedFurniture = state.furniture[nextState.selectedFurniture];
+  } else {
+    state.selectedFurniture = null;
+  }
+
+  updateSelectedFurniturePanel();
+  updateUndoRedoButtons();
+  markChanges();
+  render();
+  saveProject();
+}
+
+// Update undo/redo button states
+function updateUndoRedoButtons() {
+  const undoBtn = document.getElementById("undoBtn");
+  const redoBtn = document.getElementById("redoBtn");
+
+  if (undoBtn) {
+    undoBtn.disabled = state.undoStack.length === 0;
+  }
+  if (redoBtn) {
+    redoBtn.disabled = state.redoStack.length === 0;
+  }
+}
+
 // Show/hide upload overlay
 function showUploadOverlay() {
   document.getElementById("uploadOverlay").style.display = "flex";
@@ -725,6 +835,7 @@ function init() {
   updateScaleDisplay();
   updateSnapshotUI();
   renderSnapshotGraph();
+  updateUndoRedoButtons();
 
   // Show upload overlay if no floor plan loaded
   if (!state.floorPlanImage) {
@@ -753,6 +864,10 @@ function setupEventListeners() {
     .getElementById("cancelCalibrationBtn")
     .addEventListener("click", cancelCalibration);
 
+  // Undo/Redo controls
+  document.getElementById("undoBtn").addEventListener("click", undo);
+  document.getElementById("redoBtn").addEventListener("click", redo);
+
   // Zoom controls
   document
     .getElementById("zoomIn")
@@ -775,27 +890,32 @@ function setupEventListeners() {
   });
 
   // Furniture properties
-  document
-    .getElementById("furnitureName")
-    .addEventListener("input", handleFurniturePropertyChange);
-  document
-    .getElementById("furnitureWidth")
-    .addEventListener("input", handleFurniturePropertyChange);
-  document
-    .getElementById("furnitureDepth")
-    .addEventListener("input", handleFurniturePropertyChange);
-  document
-    .getElementById("furnitureSeatDepth")
-    .addEventListener("input", handleFurniturePropertyChange);
-  document
-    .getElementById("furnitureExpandedWidth")
-    .addEventListener("input", handleFurniturePropertyChange);
-  document
-    .getElementById("furnitureExpandedDepth")
-    .addEventListener("input", handleFurniturePropertyChange);
-  document
-    .getElementById("furnitureRotation")
-    .addEventListener("input", handleFurniturePropertyChange);
+  const propertyInputs = [
+    "furnitureName",
+    "furnitureWidth",
+    "furnitureDepth",
+    "furnitureSeatDepth",
+    "furnitureExpandedWidth",
+    "furnitureExpandedDepth",
+    "furnitureRotation",
+  ];
+
+  propertyInputs.forEach((id) => {
+    const input = document.getElementById(id);
+    input.addEventListener("focus", () => {
+      // Push undo state when starting to edit a property
+      if (!state.propertyEditInProgress) {
+        pushUndoState();
+        state.propertyEditInProgress = true;
+      }
+    });
+    input.addEventListener("blur", () => {
+      // Reset flag when done editing
+      state.propertyEditInProgress = false;
+    });
+    input.addEventListener("input", handleFurniturePropertyChange);
+  });
+
   document
     .getElementById("deleteFurniture")
     .addEventListener("click", deleteFurniture);
@@ -1130,6 +1250,9 @@ function renderFurnitureLibrary() {
 
 // Add furniture to canvas
 function addFurniture(template) {
+  // Push current state to undo stack before adding
+  pushUndoState();
+
   // Calculate center of current view in canvas coordinates
   const wrapper = document.getElementById("canvasWrapper");
   const centerScreenX = wrapper.clientWidth / 2;
@@ -1277,21 +1400,56 @@ function drawFurniture(furniture) {
   ctx.fillStyle = furniture.color;
   ctx.strokeStyle = isSelected ? "#FF1493" : "#333";
   ctx.lineWidth = isSelected ? 3 : 1;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
 
   if (furniture.shape === "L") {
-    // Draw L-shaped furniture (corner bench) as a single path
+    // Draw L-shaped furniture (corner bench) with rounded corners
     // L is made of two rectangles: one horizontal and one vertical
     const armWidth = cmToPixels(furniture.seatDepth || 50); // Seat depth (width of each arm)
+    const radius = 2;
 
-    // Create L-shaped path (going clockwise from top-left)
+    // Create L-shaped path with rounded corners
     ctx.beginPath();
-    ctx.moveTo(-w / 2, -h / 2); // Top-left corner
-    ctx.lineTo(-w / 2 + armWidth, -h / 2); // Top of vertical arm
-    ctx.lineTo(-w / 2 + armWidth, h / 2 - armWidth); // Inner corner (vertical meets horizontal)
-    ctx.lineTo(w / 2, h / 2 - armWidth); // Top-right of horizontal arm
-    ctx.lineTo(w / 2, h / 2); // Bottom-right corner
-    ctx.lineTo(-w / 2, h / 2); // Bottom-left corner
-    ctx.closePath(); // Back to top-left
+    // Top-left corner (rounded)
+    ctx.moveTo(-w / 2 + radius, -h / 2);
+    ctx.arcTo(-w / 2, -h / 2, -w / 2, -h / 2 + radius, radius);
+    // Left side down to bottom-left corner
+    ctx.lineTo(-w / 2, h / 2 - radius);
+    ctx.arcTo(-w / 2, h / 2, -w / 2 + radius, h / 2, radius);
+    // Bottom edge to bottom-right corner
+    ctx.lineTo(w / 2 - radius, h / 2);
+    ctx.arcTo(w / 2, h / 2, w / 2, h / 2 - radius, radius);
+    // Right edge up to horizontal arm
+    ctx.lineTo(w / 2, h / 2 - armWidth + radius);
+    ctx.arcTo(
+      w / 2,
+      h / 2 - armWidth,
+      w / 2 - radius,
+      h / 2 - armWidth,
+      radius,
+    );
+    // Horizontal arm left to inner corner
+    ctx.lineTo(-w / 2 + armWidth + radius, h / 2 - armWidth);
+    ctx.arcTo(
+      -w / 2 + armWidth,
+      h / 2 - armWidth,
+      -w / 2 + armWidth,
+      h / 2 - armWidth - radius,
+      radius,
+    );
+    // Inner vertical edge up to top of vertical arm
+    ctx.lineTo(-w / 2 + armWidth, -h / 2 + radius);
+    ctx.arcTo(
+      -w / 2 + armWidth,
+      -h / 2,
+      -w / 2 + armWidth + radius,
+      -h / 2,
+      radius,
+    );
+    // Top edge back to start
+    ctx.lineTo(-w / 2 + radius, -h / 2);
+    ctx.closePath();
 
     ctx.fill();
     ctx.stroke();
@@ -1304,9 +1462,7 @@ function drawFurniture(furniture) {
     ctx.stroke();
   } else if (furniture.shape === "expandable") {
     // Draw expandable furniture (sleeper sofa)
-    // Regular size
-    ctx.fillRect(-w / 2, -h / 2, w, h);
-    ctx.strokeRect(-w / 2, -h / 2, w, h);
+    const radius = 2;
 
     // Expanded size (dashed outline) if significantly different
     if (furniture.expandedWidth || furniture.expandedDepth) {
@@ -1331,15 +1487,26 @@ function drawFurniture(furniture) {
         const widthOffset = (expW - w) / 2;
         const depthOffset = expH - h;
 
-        ctx.strokeRect(-expW / 2, -h / 2 - depthOffset, expW, expH);
+        ctx.beginPath();
+        ctx.roundRect(-expW / 2, -h / 2 - depthOffset, expW, expH, radius);
+        ctx.stroke();
         ctx.setLineDash([]);
         ctx.restore();
       }
+
+      // Regular size (rounded rectangle)
+      ctx.beginPath();
+      ctx.roundRect(-w / 2, -h / 2, w, h, radius);
+      ctx.fill();
+      ctx.stroke();
     }
   } else {
-    // Draw regular rectangle
-    ctx.fillRect(-w / 2, -h / 2, w, h);
-    ctx.strokeRect(-w / 2, -h / 2, w, h);
+    // Draw regular rectangle with rounded corners
+    const radius = 2;
+    ctx.beginPath();
+    ctx.roundRect(-w / 2, -h / 2, w, h, radius);
+    ctx.fill();
+    ctx.stroke();
   }
 
   // Draw corner markers and rotation handle (for selected furniture)
@@ -1393,6 +1560,8 @@ function drawFurniture(furniture) {
     ctx.fillStyle = "#fff";
     ctx.strokeStyle = "#000";
     ctx.lineWidth = 3;
+    ctx.lineJoin = "round";
+    ctx.miterLimit = 2;
     ctx.textAlign = "center";
 
     // Width dimension (top)
@@ -1415,7 +1584,9 @@ function drawFurniture(furniture) {
   ctx.strokeStyle = "#000";
   ctx.font = "12px sans-serif";
   ctx.textAlign = "center";
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 3;
+  ctx.lineJoin = "round";
+  ctx.miterLimit = 2;
   ctx.strokeText(furniture.name, 0, 0);
   ctx.fillText(furniture.name, 0, 0);
 
@@ -1457,6 +1628,8 @@ function handleCanvasMouseDown(e) {
     state.selectedFurniture &&
     isPointOnRotationHandle(x, y, state.selectedFurniture)
   ) {
+    // Push undo state before rotating
+    pushUndoState();
     state.isRotating = true;
     render();
     return;
@@ -1473,6 +1646,8 @@ function handleCanvasMouseDown(e) {
   }
 
   if (clicked) {
+    // Push undo state before dragging
+    pushUndoState();
     state.selectedFurniture = clicked;
     state.isDragging = true;
     state.dragStart = { x: x - clicked.x, y: y - clicked.y };
@@ -1693,6 +1868,9 @@ function handleFurniturePropertyChange(e) {
 function deleteFurniture() {
   if (!state.selectedFurniture) return;
 
+  // Push current state to undo stack before deleting
+  pushUndoState();
+
   state.furniture = state.furniture.filter(
     (f) => f.id !== state.selectedFurniture.id,
   );
@@ -1705,6 +1883,23 @@ function deleteFurniture() {
 
 // Handle keyboard shortcuts
 function handleKeyDown(e) {
+  // Undo (Ctrl+Z or Cmd+Z)
+  if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
+    e.preventDefault();
+    undo();
+    return;
+  }
+
+  // Redo (Ctrl+Y or Cmd+Y or Ctrl+Shift+Z or Cmd+Shift+Z)
+  if (
+    ((e.ctrlKey || e.metaKey) && e.key === "y") ||
+    ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "z")
+  ) {
+    e.preventDefault();
+    redo();
+    return;
+  }
+
   // Delete key removes selected furniture
   if (e.key === "Delete" || e.key === "Del") {
     if (state.selectedFurniture) {
