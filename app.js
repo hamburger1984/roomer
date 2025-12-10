@@ -934,10 +934,7 @@ function setupEventListeners() {
       // After handling fork, create the snapshot
       createSnapshot();
     } else {
-      const snapshot = createSnapshot();
-      if (snapshot) {
-        alert("Snapshot erstellt!");
-      }
+      createSnapshot();
     }
   });
 
@@ -1407,48 +1404,54 @@ function drawFurniture(furniture) {
     // Draw L-shaped furniture (corner bench) with rounded corners
     // L is made of two rectangles: one horizontal and one vertical
     const armWidth = cmToPixels(furniture.seatDepth || 50); // Seat depth (width of each arm)
-    const radius = 2;
+    const radius = 1.5;
 
     // Create L-shaped path with rounded corners
     ctx.beginPath();
-    // Top-left corner (rounded)
+    // Start at top-left, after the corner radius
     ctx.moveTo(-w / 2 + radius, -h / 2);
-    ctx.arcTo(-w / 2, -h / 2, -w / 2, -h / 2 + radius, radius);
-    // Left side down to bottom-left corner
-    ctx.lineTo(-w / 2, h / 2 - radius);
-    ctx.arcTo(-w / 2, h / 2, -w / 2 + radius, h / 2, radius);
-    // Bottom edge to bottom-right corner
-    ctx.lineTo(w / 2 - radius, h / 2);
-    ctx.arcTo(w / 2, h / 2, w / 2, h / 2 - radius, radius);
-    // Right edge up to horizontal arm
-    ctx.lineTo(w / 2, h / 2 - armWidth + radius);
+    // Top edge to top-right of vertical arm
+    ctx.lineTo(-w / 2 + armWidth - radius, -h / 2);
+    // Top-right corner of vertical arm (inner corner - rounded)
+    ctx.arcTo(
+      -w / 2 + armWidth,
+      -h / 2,
+      -w / 2 + armWidth,
+      -h / 2 + radius,
+      radius,
+    );
+    // Right edge of vertical arm down to horizontal arm
+    ctx.lineTo(-w / 2 + armWidth, h / 2 - armWidth - radius);
+    // Inner corner (rounded)
+    ctx.arcTo(
+      -w / 2 + armWidth,
+      h / 2 - armWidth,
+      -w / 2 + armWidth + radius,
+      h / 2 - armWidth,
+      radius,
+    );
+    // Top edge of horizontal arm to the right
+    ctx.lineTo(w / 2 - radius, h / 2 - armWidth);
+    // Top-right corner of horizontal arm (outer corner - rounded)
     ctx.arcTo(
       w / 2,
       h / 2 - armWidth,
-      w / 2 - radius,
-      h / 2 - armWidth,
+      w / 2,
+      h / 2 - armWidth + radius,
       radius,
     );
-    // Horizontal arm left to inner corner
-    ctx.lineTo(-w / 2 + armWidth + radius, h / 2 - armWidth);
-    ctx.arcTo(
-      -w / 2 + armWidth,
-      h / 2 - armWidth,
-      -w / 2 + armWidth,
-      h / 2 - armWidth - radius,
-      radius,
-    );
-    // Inner vertical edge up to top of vertical arm
-    ctx.lineTo(-w / 2 + armWidth, -h / 2 + radius);
-    ctx.arcTo(
-      -w / 2 + armWidth,
-      -h / 2,
-      -w / 2 + armWidth + radius,
-      -h / 2,
-      radius,
-    );
-    // Top edge back to start
-    ctx.lineTo(-w / 2 + radius, -h / 2);
+    // Right edge down to bottom-right corner
+    ctx.lineTo(w / 2, h / 2 - radius);
+    // Bottom-right corner (rounded)
+    ctx.arcTo(w / 2, h / 2, w / 2 - radius, h / 2, radius);
+    // Bottom edge to bottom-left corner
+    ctx.lineTo(-w / 2 + radius, h / 2);
+    // Bottom-left corner (rounded)
+    ctx.arcTo(-w / 2, h / 2, -w / 2, h / 2 - radius, radius);
+    // Left edge up to top-left corner
+    ctx.lineTo(-w / 2, -h / 2 + radius);
+    // Top-left corner (rounded)
+    ctx.arcTo(-w / 2, -h / 2, -w / 2 + radius, -h / 2, radius);
     ctx.closePath();
 
     ctx.fill();
@@ -1462,7 +1465,7 @@ function drawFurniture(furniture) {
     ctx.stroke();
   } else if (furniture.shape === "expandable") {
     // Draw expandable furniture (sleeper sofa)
-    const radius = 2;
+    const radius = 1.5;
 
     // Expanded size (dashed outline) if significantly different
     if (furniture.expandedWidth || furniture.expandedDepth) {
@@ -1502,7 +1505,7 @@ function drawFurniture(furniture) {
     }
   } else {
     // Draw regular rectangle with rounded corners
-    const radius = 2;
+    const radius = 1.5;
     ctx.beginPath();
     ctx.roundRect(-w / 2, -h / 2, w, h, radius);
     ctx.fill();
