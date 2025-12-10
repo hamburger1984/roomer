@@ -335,6 +335,10 @@ const state = {
   undoStack: [], // Stack of previous states
   redoStack: [], // Stack of undone states
   propertyEditInProgress: false, // Track if property is being edited
+  // Crop management
+  cropMode: false,
+  cropStart: null,
+  cropEnd: null,
 };
 
 // Canvas and context
@@ -864,6 +868,13 @@ function setupEventListeners() {
     .getElementById("cancelCalibrationBtn")
     .addEventListener("click", cancelCalibration);
 
+  // Crop tool
+  document.getElementById("cropBtn").addEventListener("click", startCrop);
+  document.getElementById("applyCropBtn").addEventListener("click", applyCrop);
+  document
+    .getElementById("cancelCropBtn")
+    .addEventListener("click", cancelCrop);
+
   // Undo/Redo controls
   document.getElementById("undoBtn").addEventListener("click", undo);
   document.getElementById("redoBtn").addEventListener("click", redo);
@@ -927,6 +938,15 @@ function setupEventListeners() {
   document
     .getElementById("renameProject")
     .addEventListener("click", renameProject);
+  document
+    .getElementById("exportProject")
+    .addEventListener("click", exportProject);
+  document.getElementById("importProject").addEventListener("click", () => {
+    document.getElementById("projectImport").click();
+  });
+  document
+    .getElementById("projectImport")
+    .addEventListener("change", handleProjectImport);
 
   // Snapshot controls
   document.getElementById("createSnapshot").addEventListener("click", () => {
@@ -1026,6 +1046,116 @@ function applyCalibration() {
   // Exit calibration mode
   cancelCalibration();
   saveProject();
+}
+
+// ========== CROP MANAGEMENT ==========
+
+// Start crop mode
+function startCrop() {
+  if (!state.floorPlanImage) {
+    alert("Bitte laden Sie zuerst einen Grundriss.");
+    return;
+  }
+
+  state.cropMode = true;
+  state.cropStart = null;
+  state.cropEnd = null;
+
+  document.getElementById("cropPanel").style.display = "block";
+  document.getElementById("cropControls").style.display = "none";
+
+  canvas.style.cursor = "crosshair";
+  render();
+}
+
+// Cancel crop
+function cancelCrop() {
+  state.cropMode = false;
+  state.cropStart = null;
+  state.cropEnd = null;
+
+  document.getElementById("cropPanel").style.display = "none";
+  canvas.style.cursor = "grab";
+  render();
+}
+
+// Apply crop
+function applyCrop() {
+  if (!state.cropStart || !state.cropEnd) {
+    alert("Bitte wählen Sie einen Bereich aus.");
+    return;
+  }
+
+  // Calculate crop rectangle in image coordinates
+  const x1 = Math.min(state.cropStart.x, state.cropEnd.x);
+  const y1 = Math.min(state.cropStart.y, state.cropEnd.y);
+  const x2 = Math.max(state.cropStart.x, state.cropEnd.x);
+  const y2 = Math.max(state.cropStart.y, state.cropEnd.y);
+
+  const width = x2 - x1;
+  const height = y2 - y1;
+
+  if (width < 10 || height < 10) {
+    alert("Der ausgewählte Bereich ist zu klein.");
+    return;
+  }
+
+  // Push undo state before cropping
+  pushUndoState();
+
+  // Create temporary canvas for cropping
+  const tempCanvas = document.createElement("canvas");
+  tempCanvas.width = width;
+  tempCanvas.height = height;
+  const tempCtx = tempCanvas.getContext("2d");
+
+  // Draw cropped portion
+  tempCtx.drawImage(
+    state.floorPlanImage,
+    x1,
+    y1,
+    width,
+    height, // Source rectangle
+    0,
+    0,
+    width,
+    height, // Destination rectangle
+  );
+
+  // Convert to data URL
+  const croppedDataUrl = tempCanvas.toDataURL("image/png");
+
+  // Create new image from cropped data
+  const img = new Image();
+  img.onload = () => {
+    // Update state
+    state.floorPlanImage = img;
+    state.floorPlan = croppedDataUrl;
+
+    // Adjust furniture positions (translate by crop offset)
+    state.furniture.forEach((furniture) => {
+      furniture.x -= x1;
+      furniture.y -= y1;
+    });
+
+    // Adjust calibration points if they exist
+    if (state.calibrationStart) {
+      state.calibrationStart.x -= x1;
+      state.calibrationStart.y -= y1;
+    }
+    if (state.calibrationEnd) {
+      state.calibrationEnd.x -= x1;
+      state.calibrationEnd.y -= y1;
+    }
+
+    // Exit crop mode and save
+    cancelCrop();
+    resizeCanvas();
+    fitToView();
+    markChanges();
+    saveProject();
+  };
+  img.src = croppedDataUrl;
 }
 
 // Extract scale from PDF text
@@ -1381,6 +1511,39 @@ function render() {
       ctx.fillText(`${distance.toFixed(0)} px`, midX, midY - 10);
     }
   }
+
+  // Draw crop selection
+  if (state.cropMode && state.cropStart && state.cropEnd) {
+    const x1 = Math.min(state.cropStart.x, state.cropEnd.x);
+    const y1 = Math.min(state.cropStart.y, state.cropEnd.y);
+    const x2 = Math.max(state.cropStart.x, state.cropEnd.x);
+    const y2 = Math.max(state.cropStart.y, state.cropEnd.y);
+
+    ctx.save();
+
+    // Darken outside area
+    ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+    ctx.fillRect(0, 0, canvas.width, y1); // Top
+    ctx.fillRect(0, y1, x1, y2 - y1); // Left
+    ctx.fillRect(x2, y1, canvas.width - x2, y2 - y1); // Right
+    ctx.fillRect(0, y2, canvas.width, canvas.height - y2); // Bottom
+
+    // Draw selection border
+    ctx.strokeStyle = "#3498db";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 5]);
+    ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+    ctx.setLineDash([]);
+
+    // Show dimensions
+    const width = Math.round(x2 - x1);
+    const height = Math.round(y2 - y1);
+    document.getElementById("cropDimensions").textContent =
+      `${width} × ${height} px`;
+    document.getElementById("cropControls").style.display = "block";
+
+    ctx.restore();
+  }
 }
 
 // Draw individual furniture piece
@@ -1626,6 +1789,15 @@ function handleCanvasMouseDown(e) {
     return;
   }
 
+  // Handle crop mode
+  if (state.cropMode) {
+    if (!state.cropStart) {
+      state.cropStart = { x, y };
+      render();
+    }
+    return;
+  }
+
   // Check if clicked on rotation handle of selected furniture
   if (
     state.selectedFurniture &&
@@ -1717,6 +1889,13 @@ function handleCanvasMouseMove(e) {
     // Pan the canvas
     state.pan.x = e.clientX - state.panStart.x;
     state.pan.y = e.clientY - state.panStart.y;
+    render();
+    return;
+  }
+
+  if (state.cropMode && state.cropStart) {
+    const { x, y } = screenToCanvas(e.clientX, e.clientY);
+    state.cropEnd = { x, y };
     render();
     return;
   }
@@ -2059,6 +2238,80 @@ function renameProject() {
     updateProjectNameDisplay();
     renderProjectList();
   }
+}
+
+// Export project as JSON file
+function exportProject() {
+  const project = {
+    name: state.projectName,
+    floorPlan: state.floorPlan,
+    pixelsPerMeter: state.pixelsPerMeter,
+    furniture: state.furniture,
+    snapshotGraph: state.snapshotGraph,
+    currentSnapshotId: state.currentSnapshotId,
+    lastModified: new Date().toISOString(),
+    exportVersion: "1.0",
+  };
+
+  const blob = new Blob([JSON.stringify(project, null, 2)], {
+    type: "application/json",
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${state.projectName}.roomer.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// Import project from JSON file
+function handleProjectImport(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    try {
+      const importedProject = JSON.parse(event.target.result);
+
+      // Validate project structure
+      if (!importedProject.name || !importedProject.furniture) {
+        alert("Ungültiges Projektformat.");
+        return;
+      }
+
+      // Handle name conflicts
+      let projectName = importedProject.name;
+      const existingProjects = getSavedProjects();
+      const existingNames = existingProjects.map((p) => p.name);
+
+      if (existingNames.includes(projectName)) {
+        let counter = 1;
+        while (existingNames.includes(`${projectName} (${counter})`)) {
+          counter++;
+        }
+        projectName = `${projectName} (${counter})`;
+      }
+
+      // Update project name and timestamp
+      importedProject.name = projectName;
+      importedProject.lastModified = new Date().toISOString();
+
+      // Add to projects list
+      existingProjects.push(importedProject);
+      localStorage.setItem("roomer-projects", JSON.stringify(existingProjects));
+
+      // Load the imported project
+      loadProjectByName(projectName);
+    } catch (error) {
+      console.error("Import error:", error);
+      alert("Fehler beim Importieren des Projekts: " + error.message);
+    }
+  };
+  reader.readAsText(file);
+
+  // Reset file input
+  e.target.value = "";
 }
 
 // Update project name display in header

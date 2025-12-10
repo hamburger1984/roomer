@@ -39,6 +39,27 @@
           >
             ✏️
           </button>
+          <button
+            id="exportProject"
+            class="btn-icon"
+            aria-label="Projekt exportieren"
+          >
+            💾
+          </button>
+          <button
+            id="importProject"
+            class="btn-icon"
+            aria-label="Projekt importieren"
+          >
+            📂
+          </button>
+          <input
+            type="file"
+            id="projectImport"
+            accept=".json,.roomer.json"
+            class="panel-hidden"
+            aria-label="Projekt-Datei auswählen"
+          />
           <button id="closeProject" class="btn" aria-label="Projekt schließen">
             Projekt schließen
           </button>
@@ -312,6 +333,13 @@
               >
                 ✏️
               </button>
+              <button
+                id="cropBtn"
+                class="btn-icon"
+                aria-label="Grundriss zuschneiden"
+              >
+                ✂️
+              </button>
             </nav>
 
             <!-- Calibration Panel -->
@@ -355,6 +383,41 @@
                     id="cancelCalibrationBtn"
                     class="btn btn-secondary"
                     aria-label="Kalibrierung abbrechen"
+                  >
+                    Abbrechen
+                  </button>
+                </div>
+              </div>
+            </aside>
+
+            <!-- Crop Panel -->
+            <aside
+              id="cropPanel"
+              class="crop-panel panel-hidden"
+              role="dialog"
+              aria-labelledby="crop-panel-title"
+            >
+              <h4 id="crop-panel-title">Grundriss zuschneiden</h4>
+              <p class="crop-instructions">
+                Ziehen Sie ein Rechteck über den gewünschten Bereich
+              </p>
+              <div id="cropControls" class="panel-hidden">
+                <p>
+                  Ausgewählter Bereich:
+                  <span id="cropDimensions"></span>
+                </p>
+                <div class="crop-controls">
+                  <button
+                    id="applyCropBtn"
+                    class="btn"
+                    aria-label="Zuschneiden anwenden"
+                  >
+                    Zuschneiden
+                  </button>
+                  <button
+                    id="cancelCropBtn"
+                    class="btn btn-secondary"
+                    aria-label="Zuschneiden abbrechen"
                   >
                     Abbrechen
                   </button>

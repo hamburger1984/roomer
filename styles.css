@@ -549,6 +549,43 @@ header h1 {
   font-size: 0.9rem;
 }
 
+/* Crop Panel */
+.crop-panel {
+  position: absolute;
+  bottom: 5rem;
+  right: var(--spacing-md);
+  background: white;
+  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  z-index: 11;
+  min-width: 280px;
+}
+
+.crop-panel h4 {
+  margin: 0 0 var(--spacing-sm) 0;
+  color: var(--color-secondary);
+  font-size: 1rem;
+}
+
+.crop-instructions {
+  font-size: 0.85rem;
+  color: var(--color-gray);
+  margin-bottom: 0.75rem;
+  line-height: 1.5;
+}
+
+.crop-controls {
+  display: flex;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-sm);
+}
+
+#cropDimensions {
+  font-weight: bold;
+  color: var(--color-primary);
+}
+
 #mainCanvas {
   display: block;
   background: white;
