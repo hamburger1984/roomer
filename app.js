@@ -1,3 +1,14 @@
+// ========== CONFIGURATION CONSTANTS ==========
+
+// UI and interaction constants
+const MAX_UNDO_STACK_SIZE = 50;
+const ROTATION_HANDLE_DISTANCE = 30; // Distance from furniture edge to rotation handle
+const ROTATION_HANDLE_RADIUS = 8;
+const ROTATION_SNAP_ANGLE = 45; // Degrees for rotation snapping
+const FURNITURE_CORNER_RADIUS = 1.5; // Border radius for furniture shapes
+const CROP_MIN_SIZE = 10; // Minimum crop area size in pixels
+const SELECTION_CORNER_SIZE = 8; // Size of selection corner markers
+
 // Furniture library with default dimensions in cm
 const FURNITURE_LIBRARY = [
   // Seating
@@ -655,8 +666,8 @@ function pushUndoState() {
 
   state.undoStack.push(currentState);
 
-  // Limit undo stack size to 50 steps
-  if (state.undoStack.length > 50) {
+  // Limit undo stack size
+  if (state.undoStack.length > MAX_UNDO_STACK_SIZE) {
     state.undoStack.shift();
   }
 
@@ -1095,7 +1106,7 @@ function applyCrop() {
   const width = x2 - x1;
   const height = y2 - y1;
 
-  if (width < 10 || height < 10) {
+  if (width < CROP_MIN_SIZE || height < CROP_MIN_SIZE) {
     alert("Der ausgewählte Bereich ist zu klein.");
     return;
   }
@@ -1205,9 +1216,11 @@ async function extractScaleFromPDF(pdfDoc) {
       }
     }
 
+    console.log("No scale information found in PDF text");
     return false;
   } catch (error) {
-    console.error("Error extracting scale:", error);
+    console.error("Error extracting scale from PDF:", error);
+    // Non-critical error - PDF text extraction is optional
     return false;
   }
 }
@@ -1257,10 +1270,29 @@ async function handleFloorPlanUpload(e) {
         fitToView();
         saveProject();
       };
+      img.onerror = () => {
+        console.error("Error loading PDF-rendered image");
+        alert(
+          "Fehler beim Laden des PDF-Grundrisses.\n\n" +
+            "Das konvertierte Bild konnte nicht geladen werden.",
+        );
+      };
       img.src = dataUrl;
     } catch (error) {
       console.error("PDF processing error:", error);
-      alert("Fehler beim Verarbeiten des PDF: " + error.message);
+      let errorMessage = "Fehler beim Verarbeiten des PDF.\n\n";
+
+      if (error.message.includes("Invalid PDF")) {
+        errorMessage += "Die Datei scheint keine gültige PDF zu sein.";
+      } else if (error.message.includes("password")) {
+        errorMessage += "Die PDF ist passwortgeschützt.";
+      } else {
+        errorMessage += "Details: " + error.message;
+      }
+
+      alert(
+        errorMessage + "\n\nBitte versuchen Sie es mit einer anderen Datei.",
+      );
     }
     return;
   }
@@ -1276,8 +1308,20 @@ async function handleFloorPlanUpload(e) {
       fitToView();
       saveProject();
     };
+    img.onerror = () => {
+      console.error("Error loading uploaded image");
+      alert(
+        "Fehler beim Laden des Bildes.\n\n" +
+          "Die Datei ist möglicherweise beschädigt oder wird nicht unterstützt.\n" +
+          "Unterstützte Formate: PNG, JPG, GIF, WebP",
+      );
+    };
     img.src = event.target.result;
     state.floorPlan = event.target.result;
+  };
+  reader.onerror = () => {
+    console.error("FileReader error");
+    alert("Fehler beim Lesen der Datei.\n\nBitte versuchen Sie es erneut.");
   };
   reader.readAsDataURL(file);
 }
@@ -1567,7 +1611,7 @@ function drawFurniture(furniture) {
     // Draw L-shaped furniture (corner bench) with rounded corners
     // L is made of two rectangles: one horizontal and one vertical
     const armWidth = cmToPixels(furniture.seatDepth || 50); // Seat depth (width of each arm)
-    const radius = 1.5;
+    const radius = FURNITURE_CORNER_RADIUS;
 
     // Create L-shaped path with rounded corners
     ctx.beginPath();
@@ -1628,7 +1672,7 @@ function drawFurniture(furniture) {
     ctx.stroke();
   } else if (furniture.shape === "expandable") {
     // Draw expandable furniture (sleeper sofa)
-    const radius = 1.5;
+    const radius = FURNITURE_CORNER_RADIUS;
 
     // Expanded size (dashed outline) if significantly different
     if (furniture.expandedWidth || furniture.expandedDepth) {
@@ -1668,7 +1712,7 @@ function drawFurniture(furniture) {
     }
   } else {
     // Draw regular rectangle with rounded corners
-    const radius = 1.5;
+    const radius = FURNITURE_CORNER_RADIUS;
     ctx.beginPath();
     ctx.roundRect(-w / 2, -h / 2, w, h, radius);
     ctx.fill();
@@ -1677,7 +1721,7 @@ function drawFurniture(furniture) {
 
   // Draw corner markers and rotation handle (for selected furniture)
   if (isSelected) {
-    const cornerSize = 8;
+    const cornerSize = SELECTION_CORNER_SIZE;
     ctx.fillStyle = "#FF1493";
 
     // Four corners
@@ -1698,8 +1742,8 @@ function drawFurniture(furniture) {
     });
 
     // Rotation handle (circle at top center, above the furniture)
-    const handleDistance = 30; // Distance from top edge
-    const handleRadius = 8;
+    const handleDistance = ROTATION_HANDLE_DISTANCE;
+    const handleRadius = ROTATION_HANDLE_RADIUS;
     const handleY = -h / 2 - handleDistance;
 
     // Line connecting furniture to handle
@@ -1844,8 +1888,8 @@ function isPointOnRotationHandle(x, y, furniture) {
   const h = cmToPixels(furniture.depth);
   const angle = (furniture.rotation * Math.PI) / 180;
 
-  const handleDistance = 30;
-  const handleRadius = 8;
+  const handleDistance = ROTATION_HANDLE_DISTANCE;
+  const handleRadius = ROTATION_HANDLE_RADIUS;
 
   // Handle position in local coordinates
   const handleLocalX = 0;
@@ -1908,9 +1952,9 @@ function handleCanvasMouseMove(e) {
     let angle = Math.atan2(dy, dx) * (180 / Math.PI);
     angle = (angle + 90 + 360) % 360; // +90 to align with top, normalize to 0-360
 
-    // Snap to 45° increments unless Shift is pressed
+    // Snap to configured angle increments unless Shift is pressed
     if (!e.shiftKey) {
-      angle = Math.round(angle / 45) * 45;
+      angle = Math.round(angle / ROTATION_SNAP_ANGLE) * ROTATION_SNAP_ANGLE;
     }
 
     state.selectedFurniture.rotation = angle;
@@ -2102,18 +2146,39 @@ function saveProject() {
     lastModified: new Date().toISOString(),
   };
 
-  // Save as current project
-  localStorage.setItem("roomer-current-project", JSON.stringify(project));
+  try {
+    // Save as current project
+    localStorage.setItem("roomer-current-project", JSON.stringify(project));
 
-  // Also save to named projects list
-  const projects = getSavedProjects();
-  const existingIndex = projects.findIndex((p) => p.name === state.projectName);
-  if (existingIndex >= 0) {
-    projects[existingIndex] = project;
-  } else {
-    projects.push(project);
+    // Also save to named projects list
+    const projects = getSavedProjects();
+    const existingIndex = projects.findIndex(
+      (p) => p.name === state.projectName,
+    );
+    if (existingIndex >= 0) {
+      projects[existingIndex] = project;
+    } else {
+      projects.push(project);
+    }
+    localStorage.setItem("roomer-projects", JSON.stringify(projects));
+  } catch (e) {
+    if (e.name === "QuotaExceededError") {
+      alert(
+        "Speicher voll! Das Projekt konnte nicht gespeichert werden.\n\n" +
+          "Bitte löschen Sie alte Projekte oder exportieren Sie dieses Projekt als Datei.\n\n" +
+          "Tipp: Große Grundrisse (PDFs, hochauflösende Bilder) benötigen viel Speicherplatz.",
+      );
+      // Open project list to allow deletion
+      showUploadOverlay();
+    } else {
+      console.error("Error saving project:", e);
+      alert(
+        "Fehler beim Speichern: " +
+          e.message +
+          "\n\nDas Projekt konnte nicht gespeichert werden.",
+      );
+    }
   }
-  localStorage.setItem("roomer-projects", JSON.stringify(projects));
 }
 
 // Get list of saved projects
@@ -2147,6 +2212,15 @@ function loadProject() {
         resizeCanvas();
         fitToView();
       };
+      img.onerror = () => {
+        console.error("Error loading floor plan image");
+        alert(
+          "Fehler beim Laden des Grundrisses.\n\n" +
+            "Die Bilddaten sind möglicherweise beschädigt. " +
+            "Bitte laden Sie einen neuen Grundriss hoch.",
+        );
+        showUploadOverlay();
+      };
       img.src = project.floorPlan;
       state.floorPlan = project.floorPlan;
     }
@@ -2161,6 +2235,16 @@ function loadProject() {
     renderSnapshotGraph();
   } catch (e) {
     console.error("Error loading project:", e);
+    alert(
+      "Fehler beim Laden des Projekts: " +
+        e.message +
+        "\n\n" +
+        "Die Projektdaten sind möglicherweise beschädigt.\n" +
+        "Versuchen Sie, das Projekt zu löschen und ein Backup zu importieren.",
+    );
+    // Clear corrupted data and show upload overlay
+    localStorage.removeItem("roomer-current-project");
+    showUploadOverlay();
   }
 }
 
