@@ -1645,7 +1645,7 @@ function drawFurniture(furniture) {
 
       if (widthDiff > 5 || depthDiff > 5) {
         ctx.save();
-        ctx.setLineDash([5, 5]);
+        ctx.setLineDash([1, 3]);
         ctx.strokeStyle = isSelected ? "#FF1493" : "#666";
         ctx.lineWidth = isSelected ? 2 : 1;
 
