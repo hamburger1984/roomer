@@ -1,5 +1,53 @@
 # Changelog
 
+## Version 1.9 - Internationalization (December 2025)
+
+### Added
+- **Multi-Language Support**:
+  - Complete internationalization (i18n) system without external dependencies
+  - English (default) and German language support
+  - Language switcher in header (🇬🇧 English / 🇩🇪 Deutsch)
+  - Automatic language detection from browser settings
+  - Language preference stored in localStorage
+  - Dynamic UI updates without page reload
+- **Translation Coverage**:
+  - All 40+ furniture names translated
+  - All 50+ UI labels, buttons, and form fields
+  - All alert and confirm dialog messages
+  - All error messages (storage, PDF, image loading, project errors)
+  - ARIA labels for accessibility
+  - Date and time formatting (locale-aware)
+- **i18n Infrastructure**:
+  - `i18n.js` - Central translation file with nested object structure
+  - `t()` function for translation lookup with string interpolation
+  - `getCurrentLocale()` for date/time formatting
+  - `setLanguage()` for dynamic language switching
+  - `updateAllUIText()` for live UI updates
+
+### Changed
+- **Default Language**: Changed from German to English
+  - All hardcoded German text replaced with English defaults
+  - German now available as optional language
+- **Service Worker**: Updated cache to v2 to include i18n.js
+- **Manifest**: Updated app name to "Roomer - Floor Plan Designer" with lang attribute
+- **Code Quality**:
+  - Replaced all hardcoded German strings with translation keys
+  - Locale-aware date formatting (en-US / de-DE)
+  - Improved error messages with context
+
+### Technical Improvements
+- Zero-dependency i18n implementation
+- Efficient translation caching
+- Browser language detection fallback chain: localStorage → navigator.language → English
+- String interpolation support for dynamic messages (e.g., error details, counts)
+- Backward compatible - existing projects load correctly regardless of language
+
+### UI/UX Improvements
+- Seamless language switching without data loss
+- Consistent terminology across all UI elements
+- Professional English interface for international users
+- German language preserved for existing users
+
 ## Version 1.8 - Export/Import, Crop, and Undo/Redo (December 2025)
 
 ### Added
