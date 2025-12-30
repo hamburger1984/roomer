@@ -147,7 +147,7 @@ ctx.restore();
 **Code:**
 ```javascript
 ctx.strokeStyle = "#000";
-ctx.lineWidth = 2;
+ctx.lineWidth = 3;
 ctx.strokeText(furniture.name, 0, 0);
 ctx.fillStyle = "#fff";
 ctx.fillText(furniture.name, 0, 0);
@@ -454,7 +454,7 @@ ctx.restore();
 **Code:**
 ```javascript
 ctx.strokeStyle = "#000";
-ctx.lineWidth = 2;
+ctx.lineWidth = 3;
 ctx.strokeText(furniture.name, 0, 0);
 ctx.fillStyle = "#fff";
 ctx.fillText(furniture.name, 0, 0);

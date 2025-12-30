@@ -71,7 +71,7 @@ An offline-first web application for arranging furniture on floor plans.
 - Select a category or "All"
 - Click on a furniture piece from the library
 - The furniture appears **in the center of your current view**
-- It is automatically selected (blue outline)
+- It is automatically selected (magenta outline)
 
 ### 4. Edit Furniture
 - **Move**: Click and drag the furniture piece
@@ -382,7 +382,7 @@ Eine Offline-First-Webanwendung zum Einrichten von Möbeln auf Grundrissen (Floo
 - Wählen Sie eine Kategorie oder "Alle"
 - Klicken Sie auf ein Möbelstück aus der Bibliothek
 - Das Möbel erscheint **in der Mitte Ihrer aktuellen Ansicht**
-- Es wird automatisch ausgewählt (blaue Umrandung)
+- Es wird automatisch ausgewählt (magenta Umrandung)
 
 ### 4. Möbel bearbeiten
 - **Verschieben**: Klicken und ziehen Sie das Möbelstück

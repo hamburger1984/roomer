@@ -11,8 +11,8 @@
   - Language preference stored in localStorage
   - Dynamic UI updates without page reload
 - **Translation Coverage**:
-  - All 40+ furniture names translated
-  - All 50+ UI labels, buttons, and form fields
+  - All 36 furniture names translated
+  - All UI labels, buttons, and form fields
   - All alert and confirm dialog messages
   - All error messages (storage, PDF, image loading, project errors)
   - ARIA labels for accessibility
