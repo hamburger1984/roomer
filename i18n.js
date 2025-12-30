@@ -150,6 +150,8 @@ const TRANSLATIONS = {
         "Error loading project: {error}\n\n" +
         "The project data may be corrupted.\n" +
         "Try deleting the project and importing a backup.",
+      projectSaveError:
+        "Error saving: {error}\n\n" + "The project could not be saved.",
 
       // PDF errors
       pdfRenderError:
@@ -392,6 +394,9 @@ const TRANSLATIONS = {
         "Fehler beim Laden des Projekts: {error}\n\n" +
         "Die Projektdaten sind möglicherweise beschädigt.\n" +
         "Versuchen Sie, das Projekt zu löschen und ein Backup zu importieren.",
+      projectSaveError:
+        "Fehler beim Speichern: {error}\n\n" +
+        "Das Projekt konnte nicht gespeichert werden.",
 
       // PDF errors
       pdfRenderError:
@@ -407,7 +412,8 @@ const TRANSLATIONS = {
         "Fehler beim Laden des Bildes.\n\n" +
         "Die Datei ist möglicherweise beschädigt oder wird nicht unterstützt.\n" +
         "Unterstützte Formate: PNG, JPG, GIF, WebP",
-      fileReadError: "Fehler beim Lesen der Datei.\n\nBitte versuchen Sie es erneut.",
+      fileReadError:
+        "Fehler beim Lesen der Datei.\n\nBitte versuchen Sie es erneut.",
 
       // Import/Export
       invalidProjectFormat: "Ungültiges Projektformat.",

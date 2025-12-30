@@ -443,12 +443,9 @@ function checkForFork() {
   const children = getChildSnapshots(state.currentSnapshotId);
   if (children.length > 0) {
     // We're editing after reverting - there are already children
-    const message =
-      `Sie haben nach dem Zurücksetzen zu einem früheren Snapshot Änderungen vorgenommen.\n\n` +
-      `Es gibt ${children.length} neuere Snapshot(s).\n\n` +
-      `Möchten Sie:\n` +
-      `- "Abbrechen" drücken, um einen neuen Branch zu erstellen (Fork)\n` +
-      `- "OK" drücken, um die neueren Snapshots zu verwerfen`;
+    const message = t("messages.snapshotForkMessage", {
+      count: children.length,
+    });
 
     const abandon = confirm(message);
 
@@ -483,8 +480,8 @@ function deleteSnapshot(snapshotId) {
   // Confirm deletion
   const hasChildren = getChildSnapshots(snapshotId).length > 0;
   const message = hasChildren
-    ? "Diesen Snapshot und alle abhängigen Snapshots löschen?"
-    : "Diesen Snapshot löschen?";
+    ? t("messages.deleteSnapshotWithChildrenConfirm")
+    : t("messages.deleteSnapshotConfirm");
 
   if (!confirm(message)) return;
 
@@ -553,11 +550,11 @@ function renderSnapshotGraph() {
       if (isRoot) classes.push("root");
 
       const date = new Date(node.timestamp);
-      const timeStr = date.toLocaleTimeString("de-DE", {
+      const timeStr = date.toLocaleTimeString(getCurrentLocale(), {
         hour: "2-digit",
         minute: "2-digit",
       });
-      const dateStr = date.toLocaleDateString("de-DE");
+      const dateStr = date.toLocaleDateString(getCurrentLocale());
 
       html += `<div class="${classes.join(" ")}" data-snapshot-id="${node.id}">`;
       html += `<div class="snapshot-tooltip">${dateStr} ${timeStr}</div>`;
@@ -782,7 +779,7 @@ function renderProjectList() {
   listEl.innerHTML = projects
     .map((project) => {
       const date = new Date(project.lastModified);
-      const dateStr = date.toLocaleString("de-DE", {
+      const dateStr = date.toLocaleString(getCurrentLocale(), {
         day: "2-digit",
         month: "2-digit",
         year: "numeric",
@@ -822,7 +819,8 @@ function renderProjectList() {
 
 // Delete a project
 function deleteProject(projectName) {
-  if (!confirm(`Projekt "${projectName}" wirklich löschen?`)) return;
+  if (!confirm(t("messages.deleteProjectConfirm", { name: projectName })))
+    return;
 
   const projects = getSavedProjects();
   const filtered = projects.filter((p) => p.name !== projectName);
@@ -1084,12 +1082,12 @@ function applyCalibration() {
   const unit = document.getElementById("calibrationUnit").value;
 
   if (!length || length <= 0) {
-    alert("Bitte geben Sie eine gültige Länge ein.");
+    alert(t("messages.enterValidLength"));
     return;
   }
 
   if (!state.calibrationStart || !state.calibrationEnd) {
-    alert("Bitte zeichnen Sie zuerst eine Linie im Grundriss.");
+    alert(t("messages.drawLineFirst"));
     return;
   }
 
@@ -1117,7 +1115,7 @@ function applyCalibration() {
 // Start crop mode
 function startCrop() {
   if (!state.floorPlanImage) {
-    alert("Bitte laden Sie zuerst einen Grundriss.");
+    alert(t("messages.uploadFloorPlanFirst"));
     return;
   }
 
@@ -1146,7 +1144,7 @@ function cancelCrop() {
 // Apply crop
 function applyCrop() {
   if (!state.cropStart || !state.cropEnd) {
-    alert("Bitte wählen Sie einen Bereich aus.");
+    alert(t("messages.selectAreaFirst"));
     return;
   }
 
@@ -1160,7 +1158,7 @@ function applyCrop() {
   const height = y2 - y1;
 
   if (width < CROP_MIN_SIZE || height < CROP_MIN_SIZE) {
-    alert("Der ausgewählte Bereich ist zu klein.");
+    alert(t("messages.areaTooSmall"));
     return;
   }
 
@@ -1325,27 +1323,22 @@ async function handleFloorPlanUpload(e) {
       };
       img.onerror = () => {
         console.error("Error loading PDF-rendered image");
-        alert(
-          "Fehler beim Laden des PDF-Grundrisses.\n\n" +
-            "Das konvertierte Bild konnte nicht geladen werden.",
-        );
+        alert(t("messages.pdfRenderError"));
       };
       img.src = dataUrl;
     } catch (error) {
       console.error("PDF processing error:", error);
-      let errorMessage = "Fehler beim Verarbeiten des PDF.\n\n";
+      let errorMessage = t("messages.pdfProcessError");
 
       if (error.message.includes("Invalid PDF")) {
-        errorMessage += "Die Datei scheint keine gültige PDF zu sein.";
+        errorMessage += t("messages.invalidPdf");
       } else if (error.message.includes("password")) {
-        errorMessage += "Die PDF ist passwortgeschützt.";
+        errorMessage += t("messages.passwordProtectedPdf");
       } else {
-        errorMessage += "Details: " + error.message;
+        errorMessage += error.message;
       }
 
-      alert(
-        errorMessage + "\n\nBitte versuchen Sie es mit einer anderen Datei.",
-      );
+      alert(errorMessage + "\n\n" + t("messages.tryAnotherFile"));
     }
     return;
   }
@@ -1363,18 +1356,14 @@ async function handleFloorPlanUpload(e) {
     };
     img.onerror = () => {
       console.error("Error loading uploaded image");
-      alert(
-        "Fehler beim Laden des Bildes.\n\n" +
-          "Die Datei ist möglicherweise beschädigt oder wird nicht unterstützt.\n" +
-          "Unterstützte Formate: PNG, JPG, GIF, WebP",
-      );
+      alert(t("messages.imageLoadError"));
     };
     img.src = event.target.result;
     state.floorPlan = event.target.result;
   };
   reader.onerror = () => {
     console.error("FileReader error");
-    alert("Fehler beim Lesen der Datei.\n\nBitte versuchen Sie es erneut.");
+    alert(t("messages.fileReadError"));
   };
   reader.readAsDataURL(file);
 }
@@ -2223,20 +2212,12 @@ function saveProject() {
     localStorage.setItem("roomer-projects", JSON.stringify(projects));
   } catch (e) {
     if (e.name === "QuotaExceededError") {
-      alert(
-        "Speicher voll! Das Projekt konnte nicht gespeichert werden.\n\n" +
-          "Bitte löschen Sie alte Projekte oder exportieren Sie dieses Projekt als Datei.\n\n" +
-          "Tipp: Große Grundrisse (PDFs, hochauflösende Bilder) benötigen viel Speicherplatz.",
-      );
+      alert(t("messages.storageFull"));
       // Open project list to allow deletion
       showUploadOverlay();
     } else {
       console.error("Error saving project:", e);
-      alert(
-        "Fehler beim Speichern: " +
-          e.message +
-          "\n\nDas Projekt konnte nicht gespeichert werden.",
-      );
+      alert(t("messages.projectSaveError", { error: e.message }));
     }
   }
 }
@@ -2274,11 +2255,7 @@ function loadProject() {
       };
       img.onerror = () => {
         console.error("Error loading floor plan image");
-        alert(
-          "Fehler beim Laden des Grundrisses.\n\n" +
-            "Die Bilddaten sind möglicherweise beschädigt. " +
-            "Bitte laden Sie einen neuen Grundriss hoch.",
-        );
+        alert(t("messages.floorPlanLoadError"));
         showUploadOverlay();
       };
       img.src = project.floorPlan;
@@ -2295,13 +2272,7 @@ function loadProject() {
     renderSnapshotGraph();
   } catch (e) {
     console.error("Error loading project:", e);
-    alert(
-      "Fehler beim Laden des Projekts: " +
-        e.message +
-        "\n\n" +
-        "Die Projektdaten sind möglicherweise beschädigt.\n" +
-        "Versuchen Sie, das Projekt zu löschen und ein Backup zu importieren.",
-    );
+    alert(t("messages.projectLoadError", { error: e.message }));
     // Clear corrupted data and show upload overlay
     localStorage.removeItem("roomer-current-project");
     showUploadOverlay();
@@ -2420,7 +2391,7 @@ function handleProjectImport(e) {
 
       // Validate project structure
       if (!importedProject.name || !importedProject.furniture) {
-        alert("Ungültiges Projektformat.");
+        alert(t("messages.invalidProjectFormat"));
         return;
       }
 
@@ -2449,7 +2420,7 @@ function handleProjectImport(e) {
       loadProjectByName(projectName);
     } catch (error) {
       console.error("Import error:", error);
-      alert("Fehler beim Importieren des Projekts: " + error.message);
+      alert(t("messages.importError", { error: error.message }));
     }
   };
   reader.readAsText(file);

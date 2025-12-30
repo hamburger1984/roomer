@@ -1,7 +1,8 @@
 {
-  "name": "Roomer - Grundriss Planer",
+  "name": "Roomer - Floor Plan Designer",
   "short_name": "Roomer",
   "description": "Offline-first floor plan furniture arranger",
+  "lang": "en",
   "start_url": "/index.html",
   "display": "standalone",
   "background_color": "#2c3e50",
