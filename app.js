@@ -14,7 +14,7 @@ const FURNITURE_LIBRARY = [
   // Seating
   {
     id: "chair",
-    name: "Stuhl",
+    name: "Chair",
     category: "seating",
     width: 45,
     depth: 50,
@@ -22,7 +22,7 @@ const FURNITURE_LIBRARY = [
   },
   {
     id: "armchair",
-    name: "Sessel",
+    name: "Armchair",
     category: "seating",
     width: 80,
     depth: 85,
@@ -30,7 +30,7 @@ const FURNITURE_LIBRARY = [
   },
   {
     id: "sofa2",
-    name: "Sofa (2-Sitzer)",
+    name: "Sofa (2-Seater)",
     category: "seating",
     width: 150,
     depth: 85,
@@ -38,7 +38,7 @@ const FURNITURE_LIBRARY = [
   },
   {
     id: "sofa3",
-    name: "Sofa (3-Sitzer)",
+    name: "Sofa (3-Seater)",
     category: "seating",
     width: 200,
     depth: 85,
@@ -46,7 +46,7 @@ const FURNITURE_LIBRARY = [
   },
   {
     id: "sleeperSofa",
-    name: "Schlafsofa",
+    name: "Sleeper Sofa",
     category: "seating",
     width: 180,
     depth: 90,
@@ -57,7 +57,7 @@ const FURNITURE_LIBRARY = [
   },
   {
     id: "cornerBench",
-    name: "Eckbank",
+    name: "Corner Bench",
     category: "seating",
     width: 150,
     depth: 150,
@@ -69,7 +69,7 @@ const FURNITURE_LIBRARY = [
   // Tables
   {
     id: "coffeeTable",
-    name: "Couchtisch",
+    name: "Coffee Table",
     category: "tables",
     width: 100,
     depth: 60,
@@ -77,7 +77,7 @@ const FURNITURE_LIBRARY = [
   },
   {
     id: "diningTable4",
-    name: "Esstisch (4 Personen)",
+    name: "Dining Table (4 People)",
     category: "tables",
     width: 120,
     depth: 80,
@@ -85,7 +85,7 @@ const FURNITURE_LIBRARY = [
   },
   {
     id: "diningTable6",
-    name: "Esstisch (6 Personen)",
+    name: "Dining Table (6 People)",
     category: "tables",
     width: 160,
     depth: 90,
@@ -93,7 +93,7 @@ const FURNITURE_LIBRARY = [
   },
   {
     id: "desk",
-    name: "Schreibtisch",
+    name: "Desk",
     category: "tables",
     width: 140,
     depth: 70,
@@ -101,7 +101,7 @@ const FURNITURE_LIBRARY = [
   },
   {
     id: "roundTable",
-    name: "Runder Tisch",
+    name: "Round Table",
     category: "tables",
     width: 120,
     depth: 120,
@@ -112,7 +112,7 @@ const FURNITURE_LIBRARY = [
   // Storage
   {
     id: "wardrobe",
-    name: "Kleiderschrank",
+    name: "Wardrobe",
     category: "storage",
     width: 200,
     depth: 60,
@@ -128,7 +128,7 @@ const FURNITURE_LIBRARY = [
   },
   {
     id: "bookshelf",
-    name: "Bücherregal",
+    name: "Bookshelf",
     category: "storage",
     width: 80,
     depth: 30,
@@ -136,7 +136,7 @@ const FURNITURE_LIBRARY = [
   },
   {
     id: "tvStand",
-    name: "TV-Schrank",
+    name: "TV Stand",
     category: "storage",
     width: 150,
     depth: 45,
@@ -146,7 +146,7 @@ const FURNITURE_LIBRARY = [
   // Beds
   {
     id: "singleBed",
-    name: "Einzelbett",
+    name: "Single Bed",
     category: "beds",
     width: 100,
     depth: 200,
@@ -154,7 +154,7 @@ const FURNITURE_LIBRARY = [
   },
   {
     id: "doubleBed",
-    name: "Doppelbett",
+    name: "Double Bed",
     category: "beds",
     width: 160,
     depth: 200,
@@ -162,7 +162,7 @@ const FURNITURE_LIBRARY = [
   },
   {
     id: "queenBed",
-    name: "Queen-Size-Bett",
+    name: "Queen Bed",
     category: "beds",
     width: 180,
     depth: 200,
@@ -172,7 +172,7 @@ const FURNITURE_LIBRARY = [
   // Appliances
   {
     id: "washingMachine",
-    name: "Waschmaschine",
+    name: "Washing Machine",
     category: "appliances",
     width: 60,
     depth: 60,
@@ -180,7 +180,7 @@ const FURNITURE_LIBRARY = [
   },
   {
     id: "dryer",
-    name: "Trockner",
+    name: "Dryer",
     category: "appliances",
     width: 60,
     depth: 60,
@@ -188,7 +188,7 @@ const FURNITURE_LIBRARY = [
   },
   {
     id: "dishwasher",
-    name: "Geschirrspüler",
+    name: "Dishwasher",
     category: "appliances",
     width: 60,
     depth: 60,
@@ -196,7 +196,7 @@ const FURNITURE_LIBRARY = [
   },
   {
     id: "fridge",
-    name: "Kühlschrank",
+    name: "Refrigerator",
     category: "appliances",
     width: 60,
     depth: 60,
@@ -204,7 +204,7 @@ const FURNITURE_LIBRARY = [
   },
   {
     id: "fridgeLarge",
-    name: "Kühlschrank (groß)",
+    name: "Refrigerator (Large)",
     category: "appliances",
     width: 70,
     depth: 70,
@@ -212,7 +212,7 @@ const FURNITURE_LIBRARY = [
   },
   {
     id: "stove",
-    name: "Herd",
+    name: "Stove",
     category: "appliances",
     width: 60,
     depth: 60,
@@ -220,7 +220,7 @@ const FURNITURE_LIBRARY = [
   },
   {
     id: "oven",
-    name: "Backofen",
+    name: "Oven",
     category: "appliances",
     width: 60,
     depth: 60,
@@ -230,7 +230,7 @@ const FURNITURE_LIBRARY = [
   // Decoration
   {
     id: "plantSmall",
-    name: "Pflanze (klein)",
+    name: "Plant (Small)",
     category: "decoration",
     width: 30,
     depth: 30,
@@ -238,7 +238,7 @@ const FURNITURE_LIBRARY = [
   },
   {
     id: "plantMedium",
-    name: "Pflanze (mittel)",
+    name: "Plant (Medium)",
     category: "decoration",
     width: 40,
     depth: 40,
@@ -246,7 +246,7 @@ const FURNITURE_LIBRARY = [
   },
   {
     id: "plantLarge",
-    name: "Pflanze (groß)",
+    name: "Plant (Large)",
     category: "decoration",
     width: 50,
     depth: 50,
@@ -262,7 +262,7 @@ const FURNITURE_LIBRARY = [
   },
   {
     id: "lampFloor",
-    name: "Stehlampe",
+    name: "Floor Lamp",
     category: "decoration",
     width: 30,
     depth: 30,
@@ -270,7 +270,7 @@ const FURNITURE_LIBRARY = [
   },
   {
     id: "lampTable",
-    name: "Tischlampe",
+    name: "Table Lamp",
     category: "decoration",
     width: 20,
     depth: 20,
@@ -278,7 +278,7 @@ const FURNITURE_LIBRARY = [
   },
   {
     id: "kitchenWallCabinet",
-    name: "Hängeschrank",
+    name: "Wall Cabinet",
     category: "storage",
     width: 60,
     depth: 35,
@@ -286,7 +286,7 @@ const FURNITURE_LIBRARY = [
   },
   {
     id: "kitchenBaseCabinet",
-    name: "Unterschrank",
+    name: "Base Cabinet",
     category: "storage",
     width: 60,
     depth: 60,
@@ -294,7 +294,7 @@ const FURNITURE_LIBRARY = [
   },
   {
     id: "rugSmall",
-    name: "Teppich (klein)",
+    name: "Rug (Small)",
     category: "decoration",
     width: 120,
     depth: 180,
@@ -302,7 +302,7 @@ const FURNITURE_LIBRARY = [
   },
   {
     id: "rugMedium",
-    name: "Teppich (mittel)",
+    name: "Rug (Medium)",
     category: "decoration",
     width: 160,
     depth: 230,
@@ -310,7 +310,7 @@ const FURNITURE_LIBRARY = [
   },
   {
     id: "rugLarge",
-    name: "Teppich (groß)",
+    name: "Rug (Large)",
     category: "decoration",
     width: 200,
     depth: 300,
@@ -336,7 +336,7 @@ const state = {
   calibrationMode: false,
   calibrationStart: null,
   calibrationEnd: null,
-  projectName: "Unbenanntes Projekt",
+  projectName: "Untitled Project",
   sidebarPinned: true,
   // Snapshot history management (graph-based)
   snapshotGraph: [], // Array of snapshot nodes
@@ -836,12 +836,18 @@ function updateScaleDisplay() {
   if (state.pixelsPerMeter) {
     display.textContent = `${state.pixelsPerMeter.toFixed(1)} px/m`;
   } else {
-    display.textContent = "Kein Maßstab";
+    display.textContent =
+      typeof t === "function" ? t("ui.noScale") : "No Scale";
   }
 }
 
 // Initialize application
 function init() {
+  // Initialize i18n system first
+  if (typeof initLanguage === "function") {
+    initLanguage();
+  }
+
   setupEventListeners();
   renderFurnitureLibrary();
   loadProject();
@@ -858,8 +864,55 @@ function init() {
   }
 }
 
+// Update all UI text when language changes
+function updateAllUIText() {
+  if (typeof t !== "function") return;
+
+  // Update document title and header
+  document.title = t("ui.appTitle");
+  const headerH1 = document.querySelector("header h1");
+  if (headerH1) headerH1.textContent = t("ui.appTitle");
+
+  // Update category buttons
+  document.querySelectorAll(".category-btn").forEach((btn) => {
+    const category = btn.dataset.category;
+    btn.textContent = t(`ui.${category}`);
+  });
+
+  // Update scale display
+  updateScaleDisplay();
+
+  // Update furniture library
+  renderFurnitureLibrary();
+
+  // Update selected furniture panel if visible
+  updateSelectedFurniturePanel();
+
+  // Update project name if it's still the default
+  const defaultNames = ["Untitled Project", "Unbenanntes Projekt"];
+  if (defaultNames.includes(state.projectName)) {
+    state.projectName = t("ui.untitledProject");
+    updateProjectNameDisplay();
+  }
+
+  // Re-render snapshot graph (in case tooltips need translation)
+  renderSnapshotGraph();
+}
+
 // Setup all event listeners
 function setupEventListeners() {
+  // Language switcher
+  const languageSelector = document.getElementById("languageSelector");
+  if (languageSelector && typeof setLanguage === "function") {
+    languageSelector.addEventListener("change", (e) => {
+      setLanguage(e.target.value);
+    });
+    // Set initial value
+    if (typeof currentLanguage !== "undefined") {
+      languageSelector.value = currentLanguage;
+    }
+  }
+
   // File upload
   document
     .getElementById("floorPlanUpload")
@@ -1410,8 +1463,11 @@ function renderFurnitureLibrary() {
   filtered.forEach((furniture) => {
     const div = document.createElement("div");
     div.className = "furniture-item";
+    // Use translation if available, otherwise use the name from library
+    const furnitureName =
+      typeof t === "function" ? t(`furniture.${furniture.id}`) : furniture.name;
     div.innerHTML = `
-            <h4>${furniture.name}</h4>
+            <h4>${furnitureName}</h4>
             <p>${furniture.width} × ${furniture.depth} cm</p>
         `;
     div.addEventListener("click", () => addFurniture(furniture));
@@ -1433,10 +1489,14 @@ function addFurniture(template) {
   const centerX = (centerScreenX - state.pan.x) / state.zoom;
   const centerY = (centerScreenY - state.pan.y) / state.zoom;
 
+  // Use translation for furniture name if available
+  const furnitureName =
+    typeof t === "function" ? t(`furniture.${template.id}`) : template.name;
+
   const furniture = {
     id: Date.now(),
     templateId: template.id,
-    name: template.name,
+    name: furnitureName,
     width: template.width,
     depth: template.depth,
     color: template.color,
@@ -2199,7 +2259,7 @@ function loadProject() {
   try {
     const project = JSON.parse(saved);
 
-    state.projectName = project.name || "Unbenanntes Projekt";
+    state.projectName = project.name || "Untitled Project";
     updateProjectNameDisplay();
 
     if (project.floorPlan) {
@@ -2291,7 +2351,7 @@ function closeProject() {
   state.furniture = [];
   state.selectedFurniture = null;
   state.pixelsPerMeter = null;
-  state.projectName = "Unbenanntes Projekt";
+  state.projectName = "Untitled Project";
   localStorage.removeItem("roomer-current-project");
   showUploadOverlay();
   resizeCanvas();

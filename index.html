@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="de">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Roomer - Grundriss Planer</title>
+    <title>Roomer - Floor Plan Designer</title>
     <link rel="stylesheet" href="styles.css" />
     <link rel="manifest" href="manifest.json" />
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -11,7 +11,7 @@
   <body>
     <div id="app">
       <header role="banner">
-        <h1>Roomer - Grundriss Planer</h1>
+        <h1>Roomer - Floor Plan Designer</h1>
         <div class="header-controls">
           <div
             id="snapshotGraphHeader"
@@ -22,7 +22,7 @@
           <button
             id="createSnapshot"
             class="btn-icon"
-            aria-label="Snapshot erstellen"
+            aria-label="Create snapshot"
           >
             📸
           </button>
@@ -30,26 +30,26 @@
             id="projectNameDisplay"
             class="project-name-display"
             aria-live="polite"
-            >Unbenanntes Projekt</span
+            >Untitled Project</span
           >
           <button
             id="renameProject"
             class="btn-icon"
-            aria-label="Projekt umbenennen"
+            aria-label="Rename project"
           >
             ✏️
           </button>
           <button
             id="exportProject"
             class="btn-icon"
-            aria-label="Projekt exportieren"
+            aria-label="Export project"
           >
             💾
           </button>
           <button
             id="importProject"
             class="btn-icon"
-            aria-label="Projekt importieren"
+            aria-label="Import project"
           >
             📂
           </button>
@@ -58,10 +58,18 @@
             id="projectImport"
             accept=".json,.roomer.json"
             class="panel-hidden"
-            aria-label="Projekt-Datei auswählen"
+            aria-label="Select project file"
           />
-          <button id="closeProject" class="btn" aria-label="Projekt schließen">
-            Projekt schließen
+          <select
+            id="languageSelector"
+            class="language-selector"
+            aria-label="Select language"
+          >
+            <option value="en">🇬🇧 English</option>
+            <option value="de">🇩🇪 Deutsch</option>
+          </select>
+          <button id="closeProject" class="btn" aria-label="Close project">
+            Close Project
           </button>
         </div>
       </header>
@@ -74,7 +82,7 @@
         <button
           class="sidebar-pin-btn"
           id="sidebarPinBtn"
-          aria-label="Sidebar anheften"
+          aria-label="Pin sidebar"
           aria-pressed="false"
         >
           📌
@@ -85,61 +93,61 @@
           class="sidebar"
           id="sidebar"
           role="complementary"
-          aria-label="Möbel und Werkzeuge"
+          aria-label="Furniture and Tools"
         >
           <section class="section" aria-labelledby="furniture-section-heading">
             <h2 id="furniture-section-heading" class="sr-only">
-              Möbelkategorien
+              Furniture Categories
             </h2>
-            <nav class="furniture-categories" aria-label="Möbelkategorien">
+            <nav class="furniture-categories" aria-label="Furniture Categories">
               <button
                 class="category-btn active"
                 data-category="all"
                 aria-pressed="true"
               >
-                Alle
+                All
               </button>
               <button
                 class="category-btn"
                 data-category="seating"
                 aria-pressed="false"
               >
-                Sitzgelegenheiten
+                Seating
               </button>
               <button
                 class="category-btn"
                 data-category="tables"
                 aria-pressed="false"
               >
-                Tische
+                Tables
               </button>
               <button
                 class="category-btn"
                 data-category="storage"
                 aria-pressed="false"
               >
-                Schränke
+                Cabinets
               </button>
               <button
                 class="category-btn"
                 data-category="beds"
                 aria-pressed="false"
               >
-                Betten
+                Beds
               </button>
               <button
                 class="category-btn"
                 data-category="appliances"
                 aria-pressed="false"
               >
-                Geräte
+                Appliances
               </button>
               <button
                 class="category-btn"
                 data-category="decoration"
                 aria-pressed="false"
               >
-                Dekoration
+                Decoration
               </button>
             </nav>
             <div id="furnitureList" class="furniture-list" role="list"></div>
@@ -151,64 +159,68 @@
             aria-labelledby="furniture-properties-heading"
           >
             <h2 id="furniture-properties-heading" class="sr-only">
-              Möbeleigenschaften
+              Furniture Properties
             </h2>
             <form
               class="furniture-properties"
-              aria-label="Möbeleigenschaften bearbeiten"
+              aria-label="Edit furniture properties"
             >
               <label>
                 Name:
-                <input type="text" id="furnitureName" aria-label="Möbelname" />
+                <input
+                  type="text"
+                  id="furnitureName"
+                  aria-label="Furniture name"
+                />
               </label>
               <label>
-                Breite (cm):
+                Width (cm):
                 <input
                   type="number"
                   id="furnitureWidth"
                   step="1"
                   min="1"
-                  aria-label="Breite in Zentimetern"
+                  aria-label="Width in centimeters"
                 />
               </label>
               <label>
-                Tiefe (cm):
+                Depth (cm):
                 <input
                   type="number"
                   id="furnitureDepth"
                   step="1"
                   min="1"
-                  aria-label="Tiefe in Zentimetern"
+                  aria-label="Depth in centimeters"
                 />
               </label>
               <label id="seatDepthLabel" class="property-label-hidden">
-                Sitzfläche (cm):
+                Seat Depth (cm):
                 <input
                   type="number"
                   id="furnitureSeatDepth"
                   step="1"
                   min="1"
-                  aria-label="Sitzflächentiefe in Zentimetern"
+                  aria-label="Seat depth in centimeters"
                 />
               </label>
               <label id="expandedWidthLabel" class="property-label-hidden">
-                Breite ausgeklappt (cm):
+                Expanded Width (cm):
                 <input
                   type="number"
                   id="furnitureExpandedWidth"
                   step="1"
                   min="1"
-                  aria-label="Breite ausgeklappt in Zentimetern"
+                  aria-label="Expanded width in centimeters"
                 />
               </label>
               <label id="expandedDepthLabel" class="property-label-hidden">
-                Tiefe ausgeklappt (cm):
+                Expanded Depth (cm):
                 <input
                   type="number"
                   id="furnitureExpandedDepth"
                   step="1"
                   min="1"
-                  aria-label="Tiefe ausgeklappt in Zentimetern"
+                  aria-label="Expanded depth in centimeters"
                 />
               </label>
               <label>
@@ -219,16 +231,16 @@
                   step="1"
                   min="0"
                   max="359"
-                  aria-label="Rotation in Grad"
+                  aria-label="Rotation in degrees"
                 />
               </label>
               <button
                 id="deleteFurniture"
                 class="btn btn-danger"
                 type="button"
-                aria-label="Möbel löschen"
+                aria-label="Delete furniture"
               >
-                Löschen
+                Delete
               </button>
             </form>
           </section>
@@ -238,10 +250,10 @@
         <main
           class="canvas-container"
           role="main"
-          aria-label="Grundriss-Arbeitsbereich"
+          aria-label="Floor Plan Workspace"
         >
           <div id="canvasWrapper" class="canvas-wrapper">
-            <canvas id="mainCanvas" aria-label="Grundriss-Canvas"></canvas>
+            <canvas id="mainCanvas" aria-label="Floor plan canvas"></canvas>
             <div
               id="uploadOverlay"
               class="upload-overlay"
@@ -249,35 +261,35 @@
               aria-labelledby="upload-dialog-title"
             >
               <div class="upload-box">
-                <h2 id="upload-dialog-title">Neues Projekt</h2>
-                <p>Grundriss hochladen</p>
+                <h2 id="upload-dialog-title">New Project</h2>
+                <p>Upload Floor Plan</p>
                 <input
                   type="file"
                   id="floorPlanUpload"
                   accept="image/*,.pdf"
                   class="panel-hidden"
-                  aria-label="Grundriss-Datei auswählen"
+                  aria-label="Select floor plan file"
                 />
                 <input
                   type="text"
                   id="projectNameInput"
-                  placeholder="Projektname"
+                  placeholder="Project Name"
                   class="project-name-input"
-                  aria-label="Projektname eingeben"
+                  aria-label="Enter project name"
                 />
                 <button
                   id="uploadBtn"
                   class="btn upload-btn-sized"
-                  aria-label="Datei für Grundriss auswählen"
+                  aria-label="Select file for floor plan"
                 >
-                  📁 Datei auswählen
+                  📁 Select File
                 </button>
 
                 <section
                   class="project-list-section"
                   aria-labelledby="saved-projects-heading"
                 >
-                  <h3 id="saved-projects-heading">Gespeicherte Projekte</h3>
+                  <h3 id="saved-projects-heading">Saved Projects</h3>
                   <div
                     id="projectList"
                     class="project-list-container"
@@ -288,55 +300,41 @@
             </div>
 
             <!-- Bottom Right Toolbar -->
-            <nav class="canvas-controls" aria-label="Ansichtssteuerung">
-              <button
-                id="undoBtn"
-                class="btn-icon"
-                aria-label="Rückgängig"
-                disabled
-              >
+            <nav class="canvas-controls" aria-label="View Controls">
+              <button id="undoBtn" class="btn-icon" aria-label="Undo" disabled>
                 ↶
               </button>
-              <button
-                id="redoBtn"
-                class="btn-icon"
-                aria-label="Wiederherstellen"
-                disabled
-              >
+              <button id="redoBtn" class="btn-icon" aria-label="Redo" disabled>
                 ↷
               </button>
               <span class="scale-separator" aria-hidden="true">|</span>
-              <button id="zoomIn" class="btn-icon" aria-label="Hineinzoomen">
+              <button id="zoomIn" class="btn-icon" aria-label="Zoom in">
                 +
               </button>
-              <button id="zoomOut" class="btn-icon" aria-label="Herauszoomen">
+              <button id="zoomOut" class="btn-icon" aria-label="Zoom out">
                 -
               </button>
-              <button
-                id="resetView"
-                class="btn-icon"
-                aria-label="Ansicht zurücksetzen"
-              >
+              <button id="resetView" class="btn-icon" aria-label="Reset view">
                 ⌂
               </button>
-              <span id="zoomLevel" aria-live="polite" aria-label="Zoomstufe"
+              <span id="zoomLevel" aria-live="polite" aria-label="Zoom level"
                 >100%</span
               >
               <span class="scale-separator" aria-hidden="true">|</span>
               <span id="scaleDisplay" class="scale-info" aria-live="polite"
-                >Kein Maßstab</span
+                >No Scale</span
               >
               <button
                 id="calibrateBtnSmall"
                 class="btn-icon"
-                aria-label="Maßstab kalibrieren"
+                aria-label="Calibrate scale"
               >
                 ✏️
               </button>
               <button
                 id="cropBtn"
                 class="btn-icon"
-                aria-label="Grundriss zuschneiden"
+                aria-label="Crop floor plan"
               >
                 ✂️
               </button>
@@ -349,42 +347,42 @@
               role="dialog"
               aria-labelledby="calibration-panel-title"
             >
-              <h4 id="calibration-panel-title">Maßstab kalibrieren</h4>
+              <h4 id="calibration-panel-title">Calibrate Scale</h4>
               <p class="calibration-instructions">
-                1. Klicken Sie auf Startpunkt<br />
-                2. Klicken Sie auf Endpunkt<br />
-                3. Geben Sie die echte Länge ein
+                1. Click start point<br />
+                2. Click end point<br />
+                3. Enter actual length
               </p>
               <div id="calibrationMeasure" class="panel-hidden">
                 <label>
-                  Länge dieser Linie:
+                  Length of this line:
                   <input
                     type="number"
                     id="calibrationLength"
                     step="0.01"
                     min="0.01"
-                    placeholder="z.B. 3.25"
-                    aria-label="Länge der Referenzlinie"
+                    placeholder="e.g. 3.25"
+                    aria-label="Length of reference line"
                   />
-                  <select id="calibrationUnit" aria-label="Maßeinheit">
+                  <select id="calibrationUnit" aria-label="Measurement unit">
                     <option value="m">Meter</option>
-                    <option value="cm">Zentimeter</option>
+                    <option value="cm">Centimeter</option>
                   </select>
                 </label>
                 <div class="calibration-controls">
                   <button
                     id="applyCalibrationBtn"
                     class="btn"
-                    aria-label="Kalibrierung übernehmen"
+                    aria-label="Apply calibration"
                   >
-                    Übernehmen
+                    Apply
                   </button>
                   <button
                     id="cancelCalibrationBtn"
                     class="btn btn-secondary"
-                    aria-label="Kalibrierung abbrechen"
+                    aria-label="Cancel calibration"
                   >
-                    Abbrechen
+                    Cancel
                   </button>
                 </div>
               </div>
@@ -397,29 +395,25 @@
               role="dialog"
               aria-labelledby="crop-panel-title"
             >
-              <h4 id="crop-panel-title">Grundriss zuschneiden</h4>
+              <h4 id="crop-panel-title">Crop Floor Plan</h4>
               <p class="crop-instructions">
-                Ziehen Sie ein Rechteck über den gewünschten Bereich
+                Draw a rectangle over the desired area
               </p>
               <div id="cropControls" class="panel-hidden">
                 <p>
-                  Ausgewählter Bereich:
+                  Selected area:
                   <span id="cropDimensions"></span>
                 </p>
                 <div class="crop-controls">
-                  <button
-                    id="applyCropBtn"
-                    class="btn"
-                    aria-label="Zuschneiden anwenden"
-                  >
-                    Zuschneiden
+                  <button id="applyCropBtn" class="btn" aria-label="Apply crop">
+                    Crop
                   </button>
                   <button
                     id="cancelCropBtn"
                     class="btn btn-secondary"
-                    aria-label="Zuschneiden abbrechen"
+                    aria-label="Cancel crop"
                   >
-                    Abbrechen
+                    Cancel
                   </button>
                 </div>
               </div>
@@ -429,6 +423,7 @@
       </div>
     </div>
 
+    <script src="i18n.js"></script>
     <script src="app.js"></script>
     <script>
       // Register service worker
