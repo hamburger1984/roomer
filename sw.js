@@ -1,4 +1,4 @@
-const CACHE_NAME = "roomer-v2";
+const CACHE_NAME = "roomer-v3";
 const urlsToCache = [
   "/",
   "/index.html",
@@ -6,6 +6,8 @@ const urlsToCache = [
   "/app.js",
   "/i18n.js",
   "/manifest.json",
+  "/libs/pdf.min.js",
+  "/libs/pdf.worker.min.js",
   "/icons/favicon.ico",
   "/icons/favicon-16x16.png",
   "/icons/favicon-32x32.png",
