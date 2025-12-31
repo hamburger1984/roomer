@@ -358,7 +358,7 @@ const ctx = canvas.getContext("2d");
 
 // Initialize PDF.js
 if (typeof pdfjsLib !== "undefined") {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "libs/pdf.worker.min.js";
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "libs/pdf.worker-3.11.174.min.js";
 }
 
 // ========== SNAPSHOT MANAGEMENT ==========

@@ -1,0 +1,162 @@
+{
+  "$schema": "http://cyclonedx.org/schema/bom-1.5.schema.json",
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "serialNumber": "urn:uuid:7afafa5d-54ec-4e0e-a690-412052f3e2c8",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2025-12-31T06:45:00Z",
+    "tools": {
+      "components": [
+        {
+          "type": "application",
+          "author": "Manual Creation",
+          "name": "SBOM Generator",
+          "version": "1.0"
+        }
+      ]
+    },
+    "component": {
+      "type": "application",
+      "bom-ref": "roomer-app",
+      "name": "Roomer",
+      "version": "1.9",
+      "description": "Offline-first floor plan furniture arranger",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://github.com/hamburger1984/roomer"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/hamburger1984/roomer.git"
+        }
+      ]
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/pdfjs-dist@3.11.174",
+      "name": "PDF.js",
+      "version": "3.11.174",
+      "description": "PDF.js is a Portable Document Format (PDF) viewer that is built with HTML5",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "5b5799e6f8c680663207ac5b42ee14eed2a406fa7af48f50c154f0c0b1566946"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "purl": "pkg:npm/pdfjs-dist@3.11.174",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://mozilla.github.io/pdf.js/"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/mozilla/pdf.js.git"
+        },
+        {
+          "type": "distribution",
+          "url": "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/mozilla/pdf.js/issues"
+        },
+        {
+          "type": "documentation",
+          "url": "https://github.com/mozilla/pdf.js/wiki"
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "libs/pdf-3.11.174.min.js"
+        },
+        {
+          "name": "cdx:file:type",
+          "value": "minified-javascript"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:npm/pdfjs-dist@3.11.174#worker",
+      "name": "PDF.js Worker",
+      "version": "3.11.174",
+      "description": "PDF.js Web Worker - handles PDF parsing and rendering in a separate thread",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "feabdf309770ed24bba31a5467836cdc8cf639c705af27d52b585b041bb8527b"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "purl": "pkg:npm/pdfjs-dist@3.11.174",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "libs/pdf.worker-3.11.174.min.js"
+        },
+        {
+          "name": "cdx:file:type",
+          "value": "minified-javascript"
+        },
+        {
+          "name": "cdx:component:purpose",
+          "value": "web-worker"
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "roomer-app",
+      "dependsOn": [
+        "pkg:npm/pdfjs-dist@3.11.174",
+        "pkg:npm/pdfjs-dist@3.11.174#worker"
+      ]
+    }
+  ],
+  "vulnerabilities": [],
+  "compositions": [
+    {
+      "aggregate": "complete",
+      "assemblies": ["roomer-app"],
+      "dependencies": [
+        "pkg:npm/pdfjs-dist@3.11.174",
+        "pkg:npm/pdfjs-dist@3.11.174#worker"
+      ]
+    }
+  ]
+}
