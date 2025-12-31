@@ -1,0 +1,18 @@
+<!-- Roomer App Icon - Floor Plan Grid with Furniture -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <!-- Background circle -->
+  <circle cx="64" cy="64" r="60" fill="#3498db"/>
+
+  <!-- Floor plan grid (simplified room outline) -->
+  <rect x="28" y="28" width="72" height="72" fill="none" stroke="white" stroke-width="3" rx="2"/>
+
+  <!-- Grid lines (subtle) -->
+  <line x1="64" y1="28" x2="64" y2="100" stroke="white" stroke-width="1" opacity="0.3"/>
+  <line x1="28" y1="64" x2="100" y2="64" stroke="white" stroke-width="1" opacity="0.3"/>
+
+  <!-- Furniture piece (sofa) -->
+  <rect x="45" y="52" width="38" height="24" fill="#FF1493" stroke="white" stroke-width="2" rx="2"/>
+
+  <!-- Rotation handle indicator (small circle) -->
+  <circle cx="64" cy="46" r="3" fill="#FFD700"/>
+</svg>
