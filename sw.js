@@ -1,4 +1,4 @@
-const CACHE_NAME = "roomer-v4";
+const CACHE_NAME = "roomer-v7";
 const urlsToCache = [
   "/",
   "/index.html",

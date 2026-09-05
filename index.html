@@ -265,84 +265,54 @@
             </form>
           </section>
 
+          <!-- Room Editor Panel -->
           <section
             class="section panel-hidden"
-            id="measurePanel"
-            aria-labelledby="measure-heading"
+            id="roomPanel"
+            aria-labelledby="room-heading"
           >
-            <h2 id="measure-heading" class="sr-only">Measurement Tool</h2>
-            <h3 class="measure-title">📐 Measurement Tool</h3>
-            <p class="measure-instructions" id="measureInstructions">
-              Pick a type, then click two points on the plan to add a
-              measurement.
-            </p>
-
-            <label class="measure-scale-label" for="measureScale">
-              Scale (px per 1 m):
-              <span class="measure-scale-row">
-                <input
-                  type="number"
-                  id="measureScale"
-                  step="1"
-                  min="1"
-                  aria-label="Drawing scale in pixels per meter"
-                />
-                <span class="measure-scale-unit">px/m</span>
-              </span>
+            <h2 id="room-heading" class="sr-only">Room editor</h2>
+            <h3 id="roomHeading" class="measure-title">🏠 Rooms</h3>
+            <label class="measure-scale-label" for="wallThickness">
+              Wall thickness (cm):
+              <input
+                id="wallThickness"
+                type="number"
+                step="0.5"
+                min="1"
+                value="15"
+                aria-label="Wall thickness in centimeters"
+              />
             </label>
-
+            <button id="addRoomBtn" class="btn measure-btn">
+              ＋ Add room
+            </button>
             <div
-              id="measureTypes"
-              class="measure-types"
-              role="group"
-              aria-label="Measurement types"
+              id="roomList"
+              class="obstacle-list"
+              role="list"
+              aria-label="Room list"
             ></div>
-
-            <div id="measureLegend" class="measure-legend"></div>
-
-            <section class="measure-obstacle-block" aria-label="Fixed installations">
-              <h4 class="measure-obstacle-title" id="obstacleHeading">
-                Fixed installations (limit usable space)
-              </h4>
-              <div
-                id="obstacleTypes"
-                class="measure-types"
-                role="group"
-                aria-label="Fixed installation types"
-              ></div>
-              <button
-                id="addObstacleBtn"
-                class="btn measure-btn"
-                aria-label="Add rectangular fixed installation"
-              >
-                ＋ Add fixed installation
-              </button>
-              <div id="obstacleList" class="obstacle-list" role="list"></div>
-            </section>
-
-            <div id="measureStatus" class="measure-status" aria-live="polite"></div>
-
-            <div id="measureList" class="measure-list" role="list"></div>
-
+            <div id="roomDetail"></div>
             <div class="measure-actions">
               <button
-                id="exportMeasureImage"
+                id="exportRoomImage"
                 class="btn measure-btn"
-                aria-label="Export image"
+                aria-label="Export floor plan image"
               >
                 📷 Export PNG
               </button>
               <button
-                id="clearMeasurements"
+                id="clearRooms"
                 class="btn btn-danger measure-btn"
-                aria-label="Clear all measurements"
+                aria-label="Delete all rooms"
               >
                 🗑 Clear
               </button>
               <button
-                id="exitMeasureMode"
+                id="exitRoomEditor"
                 class="btn btn-secondary measure-exit-btn"
-                aria-label="Exit measurement mode"
+                aria-label="Exit room editor"
               >
                 Done
               </button>
@@ -389,6 +359,14 @@
                   📁 Select File
                 </button>
 
+<button
+                id="blankProjectBtn"
+                class="btn upload-btn-sized"
+                aria-label="Start a blank board and draw rooms with the room editor"
+              >
+                🏠 Draw rooms from scratch (blank board)
+              </button>
+
                 <section
                   class="project-list-section"
                   aria-labelledby="saved-projects-heading"
@@ -429,15 +407,14 @@
                 >No Scale</span
               >
               <button
-                id="measureBtn"
+                id="roomBtn"
                 class="btn-icon"
-                aria-label="Measurement tool"
+                aria-label="Room editor"
                 aria-pressed="false"
               >
-                📐
+                🏠
               </button>
-              <button
-                id="calibrateBtnSmall"
+              <button id="calibrateBtnSmall"
                 class="btn-icon"
                 aria-label="Calibrate scale"
               >

@@ -9,31 +9,26 @@ const FURNITURE_CORNER_RADIUS = 1.5; // Border radius for furniture shapes
 const CROP_MIN_SIZE = 10; // Minimum crop area size in pixels
 const SELECTION_CORNER_SIZE = 8; // Size of selection corner markers
 
-// Measurement tool constants
-const MEASURE_DIM_OFFSET = 18; // Offset of dimension line from measured segment
-const MEASURE_EXT_LEN = 8; // Length of extension ticks
+// Drawing scale
 const DEFAULT_MEASURE_SCALE = 100; // Default pixels per meter for from-scratch plans
-const MEASUREMENT_TYPES = [
-  { id: "wall", code: "W", color: "#2c3e50" },
-  { id: "door", code: "D", color: "#2980b9" },
-  { id: "doorOffset", code: "DO", color: "#16a085" },
-  { id: "window", code: "Win", color: "#f39c12" },
-  { id: "windowOffset", code: "WO", color: "#e67e22" },
-  { id: "chimney", code: "Ch", color: "#6c5ce7" },
-  { id: "column", code: "Col", color: "#a29bfe" },
-  { id: "height", code: "H", color: "#d63031" },
-  { id: "other", code: "X", color: "#7f8c8d" },
-];
-const DEFAULT_MEASURE_TYPE = "wall";
 
-// Rectangular fixed installations / obstructions (heaters, appliances, …)
-const OBSTACLE_TYPES = [
-  { id: "heater", code: "Heiz", color: "#e74c3c" },
-  { id: "appliance", code: "App", color: "#8e44ad" },
-  { id: "cabinet", code: "Cab", color: "#16a085" },
-  { id: "pipe", code: "Pipe", color: "#5d6d7e" },
-];
-const DEFAULT_OBSTACLE_TYPE = "heater";
+// Room editor (parametric floor plans)
+const ROOM_WALL_TYPES = ["top", "right", "bottom", "left"];
+const ROOM_CORNERS = ["tl", "tr", "br", "bl"];
+const ROOM_FIXTURE_TYPES = ["door", "window", "heater", "chimney"];
+const DEFAULT_WALL_THICKNESS_CM = 15;
+const DEFAULT_ROOM_WIDTH_CM = 400;
+const DEFAULT_ROOM_DEPTH_CM = 350;
+const ROOM_SNAP_TOLERANCE_CM = 30;
+const ROOM_DOOR_SNAP_TOLERANCE_CM = 60;
+const ROOM_WALL_COLOR = "#34495e";
+const ROOM_BG = "#fafafa";
+const ROOM_COLORS = {
+  door: "#2980b9",
+  window: "#f39c12",
+  heater: "#e74c3c",
+  chimney: "#6c5ce7",
+};
 
 // Furniture library with default dimensions in cm
 const FURNITURE_LIBRARY = [
@@ -376,20 +371,15 @@ const state = {
   cropMode: false,
   cropStart: null,
   cropEnd: null,
-  // Measurement tool (Grundriss Maßzeichnung)
-  measureMode: false,
-  measurements: [],
-  measureActiveType: DEFAULT_MEASURE_TYPE,
-  measureDraftStart: null,
-  measureDraftEnd: null,
-  selectedMeasurement: null,
-  // Fixed installations / obstructions drawn on the plan
-  obstacles: [],
-  obstacleActiveType: DEFAULT_OBSTACLE_TYPE,
-  addObstacleMode: false,
-  obstacleDraftStart: null,
-  obstacleDraftEnd: null,
-  selectedObstacle: null,
+  // Room editor (parametric floor plans)
+  roomEditorMode: false,
+  rooms: [],
+  wallThicknessCm: DEFAULT_WALL_THICKNESS_CM,
+  selectedRoomId: null,
+  selectedWall: null,
+  selectedFixtureId: null,
+  draggingRoomId: null,
+  roomDragGrab: null,
 };
 
 // Canvas and context
@@ -690,22 +680,44 @@ function buildGraphLayout() {
 
 // ========== UNDO/REDO MANAGEMENT ==========
 
-// Push current state to undo stack (before making changes)
-function pushUndoState() {
-  // Create a snapshot of the current furniture state
-  const currentState = {
+// Capture the current editable state for undo/redo snapshots
+function snapshotCurrentState() {
+  return {
     furniture: JSON.parse(JSON.stringify(state.furniture)),
-    measurements: JSON.parse(JSON.stringify(state.measurements)),
-    obstacles: JSON.parse(JSON.stringify(state.obstacles)),
+    rooms: JSON.parse(JSON.stringify(state.rooms)),
+    wallThicknessCm: state.wallThicknessCm,
     selectedFurniture: state.selectedFurniture
       ? state.furniture.indexOf(state.selectedFurniture)
       : null,
-    selectedObstacle: state.selectedObstacle
-      ? state.obstacles.indexOf(state.selectedObstacle)
-      : null,
+    selectedRoomId: state.selectedRoomId,
   };
+}
 
-  state.undoStack.push(currentState);
+// Restore a snapshot captured by snapshotCurrentState
+function restoreSnapshot(snapshot) {
+  state.furniture = JSON.parse(JSON.stringify(snapshot.furniture));
+  state.rooms = JSON.parse(JSON.stringify(snapshot.rooms || []));
+  state.wallThicknessCm = snapshot.wallThicknessCm || DEFAULT_WALL_THICKNESS_CM;
+
+  if (
+    snapshot.selectedFurniture !== null &&
+    snapshot.selectedFurniture < state.furniture.length
+  ) {
+    state.selectedFurniture = state.furniture[snapshot.selectedFurniture];
+  } else {
+    state.selectedFurniture = null;
+  }
+
+  state.selectedRoomId =
+    snapshot.selectedRoomId && state.rooms.some((r) => r.id === snapshot.selectedRoomId)
+      ? snapshot.selectedRoomId
+      : null;
+  state.selectedFixtureId = null;
+}
+
+// Push current state to undo stack (before making changes)
+function pushUndoState() {
+  state.undoStack.push(snapshotCurrentState());
 
   // Limit undo stack size
   if (state.undoStack.length > MAX_UNDO_STACK_SIZE) {
@@ -723,51 +735,15 @@ function undo() {
   if (state.undoStack.length === 0) return;
 
   // Push current state to redo stack
-  const currentState = {
-    furniture: JSON.parse(JSON.stringify(state.furniture)),
-    measurements: JSON.parse(JSON.stringify(state.measurements)),
-    obstacles: JSON.parse(JSON.stringify(state.obstacles)),
-    selectedFurniture: state.selectedFurniture
-      ? state.furniture.indexOf(state.selectedFurniture)
-      : null,
-    selectedObstacle: state.selectedObstacle
-      ? state.obstacles.indexOf(state.selectedObstacle)
-      : null,
-  };
-  state.redoStack.push(currentState);
+  state.redoStack.push(snapshotCurrentState());
 
   // Pop state from undo stack and restore it
-  const previousState = state.undoStack.pop();
-  state.furniture = JSON.parse(JSON.stringify(previousState.furniture));
-  state.measurements = JSON.parse(JSON.stringify(previousState.measurements));
-  state.obstacles = JSON.parse(JSON.stringify(previousState.obstacles || []));
+  restoreSnapshot(state.undoStack.pop());
 
-  // Restore selected furniture
-  if (
-    previousState.selectedFurniture !== null &&
-    previousState.selectedFurniture < state.furniture.length
-  ) {
-    state.selectedFurniture = state.furniture[previousState.selectedFurniture];
-  } else {
-    state.selectedFurniture = null;
-  }
-
-  // Restore selected obstacle
-  if (
-    previousState.selectedObstacle !== null &&
-    previousState.selectedObstacle < state.obstacles.length
-  ) {
-    state.selectedObstacle = state.obstacles[previousState.selectedObstacle];
-  } else {
-    state.selectedObstacle = null;
-  }
-
-  state.selectedMeasurement = null;
   updateSelectedFurniturePanel();
   updateUndoRedoButtons();
-  if (state.measureMode) {
-    renderMeasureList();
-    renderObstacleList();
+  if (state.roomEditorMode) {
+    renderRoomPanel();
   }
   markChanges();
   render();
@@ -779,51 +755,15 @@ function redo() {
   if (state.redoStack.length === 0) return;
 
   // Push current state to undo stack
-  const currentState = {
-    furniture: JSON.parse(JSON.stringify(state.furniture)),
-    measurements: JSON.parse(JSON.stringify(state.measurements)),
-    obstacles: JSON.parse(JSON.stringify(state.obstacles)),
-    selectedFurniture: state.selectedFurniture
-      ? state.furniture.indexOf(state.selectedFurniture)
-      : null,
-    selectedObstacle: state.selectedObstacle
-      ? state.obstacles.indexOf(state.selectedObstacle)
-      : null,
-  };
-  state.undoStack.push(currentState);
+  state.undoStack.push(snapshotCurrentState());
 
   // Pop state from redo stack and restore it
-  const nextState = state.redoStack.pop();
-  state.furniture = JSON.parse(JSON.stringify(nextState.furniture));
-  state.measurements = JSON.parse(JSON.stringify(nextState.measurements));
-  state.obstacles = JSON.parse(JSON.stringify(nextState.obstacles || []));
+  restoreSnapshot(state.redoStack.pop());
 
-  // Restore selected furniture
-  if (
-    nextState.selectedFurniture !== null &&
-    nextState.selectedFurniture < state.furniture.length
-  ) {
-    state.selectedFurniture = state.furniture[nextState.selectedFurniture];
-  } else {
-    state.selectedFurniture = null;
-  }
-
-  // Restore selected obstacle
-  if (
-    nextState.selectedObstacle !== null &&
-    nextState.selectedObstacle < state.obstacles.length
-  ) {
-    state.selectedObstacle = state.obstacles[nextState.selectedObstacle];
-  } else {
-    state.selectedObstacle = null;
-  }
-
-  state.selectedMeasurement = null;
   updateSelectedFurniturePanel();
   updateUndoRedoButtons();
-  if (state.measureMode) {
-    renderMeasureList();
-    renderObstacleList();
+  if (state.roomEditorMode) {
+    renderRoomPanel();
   }
   markChanges();
   render();
@@ -851,6 +791,43 @@ function showUploadOverlay() {
 
 function hideUploadOverlay() {
   document.getElementById("uploadOverlay").style.display = "none";
+}
+
+// Start a fresh blank board so a floor plan can be drawn with the room editor
+function startBlankProject() {
+  const nameInput = document.getElementById("projectNameInput");
+  const name = (nameInput && nameInput.value.trim()) || "Untitled Project";
+
+  state.floorPlan = null;
+  state.floorPlanImage = null;
+  state.furniture = [];
+  state.selectedFurniture = null;
+  state.rooms = [];
+  state.wallThicknessCm = DEFAULT_WALL_THICKNESS_CM;
+  state.pixelsPerMeter = null;
+  state.projectName = name;
+  state.zoom = 1;
+  state.pan = { x: 0, y: 0 };
+  state.undoStack = [];
+  state.redoStack = [];
+
+  // Give the canvas a blank working surface (no uploaded image)
+  const wrapper = document.getElementById("canvasWrapper");
+  canvas.width = wrapper.clientWidth;
+  canvas.height = wrapper.clientHeight;
+
+  // Reset overlay and UI
+  hideUploadOverlay();
+  updateProjectNameDisplay();
+  updateScaleDisplay();
+  updateUndoRedoButtons();
+  updateSelectedFurniturePanel();
+  saveProject();
+  renderProjectList();
+  render();
+
+  // Open the room editor so the construction grid is visible immediately
+  startRoomEditorMode();
 }
 
 // Render project list in upload overlay
@@ -974,8 +951,12 @@ function updateAllUIText() {
   // Update selected furniture panel if visible
   updateSelectedFurniturePanel();
 
-  // Update measurement panel if the tool is active
-  if (state.measureMode) renderMeasurePanel();
+  // Update the room editor panel if active
+  if (state.roomEditorMode) renderRoomPanel();
+
+  // Translate the static room heading
+  const roomHeading = document.getElementById("roomHeading");
+  if (roomHeading && typeof t === "function") roomHeading.textContent = t("room.title");
 
   // Update project name if it's still the default
   const defaultNames = ["Untitled Project", "Unbenanntes Projekt"];
@@ -1010,6 +991,11 @@ function setupEventListeners() {
     document.getElementById("floorPlanUpload").click();
   });
 
+  // Start a blank board to draw a floor plan from scratch
+  document
+    .getElementById("blankProjectBtn")
+    .addEventListener("click", startBlankProject);
+
   // Calibration tool
   document
     .getElementById("calibrateBtnSmall")
@@ -1028,33 +1014,22 @@ function setupEventListeners() {
     .getElementById("cancelCropBtn")
     .addEventListener("click", cancelCrop);
 
-  // Measurement tool
-  document.getElementById("measureBtn").addEventListener("click", toggleMeasureMode);
-  document
-    .getElementById("measureScale")
-    .addEventListener("change", handleMeasureScaleChange);
-  document
-    .getElementById("exportMeasureImage")
-    .addEventListener("click", exportMeasurementImage);
-  document
-    .getElementById("clearMeasurements")
-    .addEventListener("click", clearMeasurements);
-  document
-    .getElementById("exitMeasureMode")
-    .addEventListener("click", exitMeasureMode);
-  document
-    .getElementById("addObstacleBtn")
-    .addEventListener("click", toggleAddObstacleMode);
-  canvas.addEventListener("contextmenu", (e) => {
-    if (state.measureMode) {
-      e.preventDefault();
-      if (state.addObstacleMode && state.obstacleDraftStart) {
-        cancelObstacleDraft();
-      } else {
-        cancelMeasureDraft();
-      }
-    }
-  });
+  // Room editor
+  document.getElementById("roomBtn").addEventListener("click", toggleRoomEditorMode);
+  const wtInput = document.getElementById("wallThickness");
+  if (wtInput) wtInput.addEventListener("change", (e) => setWallThickness(e.target.value));
+  const addRoomBtn = document.getElementById("addRoomBtn");
+  if (addRoomBtn) addRoomBtn.addEventListener("click", addDefaultRoom);
+  const exportRoomImage = document.getElementById("exportRoomImage");
+  if (exportRoomImage) {
+    exportRoomImage.addEventListener("click", () => {
+      exportMeasurementImage();
+    });
+  }
+  const clearRoomsBtn = document.getElementById("clearRooms");
+  if (clearRoomsBtn) clearRoomsBtn.addEventListener("click", clearRooms);
+  const exitRoomEditor = document.getElementById("exitRoomEditor");
+  if (exitRoomEditor) exitRoomEditor.addEventListener("click", exitRoomEditorMode);
 
   // Undo/Redo controls
   document.getElementById("undoBtn").addEventListener("click", undo);
@@ -1173,6 +1148,8 @@ function setupEventListeners() {
 
 // Start calibration mode
 function startCalibration() {
+  hideUploadOverlay();
+
   state.calibrationMode = true;
   state.calibrationStart = null;
   state.calibrationEnd = null;
@@ -1319,19 +1296,14 @@ function applyCrop() {
       furniture.y -= y1;
     });
 
-    // Adjust measurements (translate by crop offset)
-    state.measurements.forEach((measurement) => {
-      measurement.x1 -= x1;
-      measurement.y1 -= y1;
-      measurement.x2 -= x1;
-      measurement.y2 -= y1;
-    });
-
-    // Adjust fixed installations (translate by crop offset)
-    state.obstacles.forEach((obstacle) => {
-      obstacle.x -= x1;
-      obstacle.y -= y1;
-    });
+    // Adjust parametric rooms (translate by crop offset, px → cm via scale)
+    if (state.rooms.length) {
+      const pxScale = (state.pixelsPerMeter || DEFAULT_MEASURE_SCALE) / 100;
+      state.rooms.forEach((room) => {
+        room.x -= x1 / pxScale;
+        room.y -= y1 / pxScale;
+      });
+    }
 
     // Adjust calibration points if they exist
     if (state.calibrationStart) {
@@ -1353,384 +1325,28 @@ function applyCrop() {
   img.src = croppedDataUrl;
 }
 
-// ========== MEASUREMENT TOOL (GRUNDRISS MAßZEICHNUNG) ==========
-
-// Toggle measurement mode
-function toggleMeasureMode() {
-  if (state.measureMode) {
-    exitMeasureMode();
-  } else {
-    startMeasureMode();
-  }
-}
-
-// Enter measurement mode
-function startMeasureMode() {
-  if (state.calibrationMode) cancelCalibration();
-  if (state.cropMode) cancelCrop();
-
-  state.measureMode = true;
-  state.selectedFurniture = null;
-  state.selectedMeasurement = null;
-  // Obstacle flow is off by default; user opts in via the panel button
-  state.addObstacleMode = false;
-  state.obstacleDraftStart = null;
-  state.obstacleDraftEnd = null;
-  state.selectedObstacle = null;
-
-  canvas.style.cursor = "crosshair";
-  document.getElementById("measureBtn").classList.add("active");
-  document.getElementById("measureBtn").setAttribute("aria-pressed", "true");
-
-  renderMeasurePanel();
-  render();
-}
-
-// Exit measurement mode
-function exitMeasureMode() {
-  state.measureMode = false;
-  state.measureDraftStart = null;
-  state.measureDraftEnd = null;
-  state.selectedMeasurement = null;
-  state.addObstacleMode = false;
-  state.obstacleDraftStart = null;
-  state.obstacleDraftEnd = null;
-  state.selectedObstacle = null;
-
-  canvas.style.cursor = "grab";
-  document.getElementById("measureBtn").classList.remove("active");
-  document.getElementById("measureBtn").setAttribute("aria-pressed", "false");
-
-  updateSidebarPanels();
-  updateSelectedFurniturePanel();
-  render();
-}
-
-// Cancel a measurement draft in progress
-function cancelMeasureDraft() {
-  state.measureDraftStart = null;
-  state.measureDraftEnd = null;
-  renderMeasurePanel();
-  render();
-}
-
-// Change the active measurement type
-function setActiveMeasureType(typeId) {
-  if (!getMeasureType(typeId)) return;
-  state.measureActiveType = typeId;
-  cancelMeasureDraft();
-}
-
-// Handle scale input change
-function handleMeasureScaleChange(e) {
-  const v = parseFloat(e.target.value);
-  if (!Number.isFinite(v) || v <= 0) {
-    e.target.value = state.pixelsPerMeter || DEFAULT_MEASURE_SCALE;
-    return;
-  }
-  state.pixelsPerMeter = v;
-  updateScaleDisplay();
-  renderMeasurePanel();
-  render();
-}
-
-// Compute the real length (cm) of a measurement stroke
-function measurementStrokeCm(x1, y1, x2, y2) {
-  const ppm = state.pixelsPerMeter || DEFAULT_MEASURE_SCALE;
-  const px = Math.hypot(x2 - x1, y2 - y1);
-  return px / (ppm / 100);
-}
-
 // Format a length in cm for display
 function formatLength(cm) {
   return Math.round(cm) + " cm";
 }
-
-// Add a new measurement between two points
-function addMeasurement(type, x1, y1, x2, y2) {
-  if (Math.hypot(x2 - x1, y2 - y1) < 2) return;
-  const measurement = {
-    id: Date.now() + "_" + Math.random().toString(36).slice(2, 7),
-    type,
-    x1,
-    y1,
-    x2,
-    y2,
-  };
-  pushUndoState();
-  state.measurements.push(measurement);
-  state.selectedMeasurement = measurement;
-  markChanges();
-  saveProject();
-  renderMeasurePanel();
-  render();
-  return measurement;
-}
-
-// Look up a measurement type by id
-function getMeasureType(typeId) {
-  return MEASUREMENT_TYPES.find((tp) => tp.id === typeId);
-}
-
-// Delete a measurement by id
-function deleteMeasurement(id) {
-  const index = state.measurements.findIndex((m) => m.id === id);
-  if (index < 0) return;
-  if (!confirm(t("measure.deleteConfirm"))) return;
-  state.measurements.splice(index, 1);
-  if (state.selectedMeasurement && state.selectedMeasurement.id === id) {
-    state.selectedMeasurement = null;
-  }
-  markChanges();
-  saveProject();
-  renderMeasurePanel();
-  render();
-}
-
-// Clear all measurements
-function clearMeasurements() {
-  if (state.measurements.length === 0) return;
-  if (!confirm(t("measure.clearAllConfirm"))) return;
-  pushUndoState();
-  state.measurements = [];
-  state.selectedMeasurement = null;
-  cancelMeasureDraft();
-  markChanges();
-  saveProject();
-  renderMeasurePanel();
-}
-
-// Set the drawing scale so a measurement's drawn length matches its real value
-function setMeasurementAsScale(id) {
-  const measurement = state.measurements.find((m) => m.id === id);
-  if (!measurement) return;
-  const input = document.querySelector(`[data-attach="${id}"]`);
-  const realCm = parseFloat(input ? input.value : NaN);
-  if (!Number.isFinite(realCm) || realCm <= 0) {
-    alert(t("messages.enterValidLength"));
-    return;
-  }
-  const px = Math.hypot(
-    measurement.x2 - measurement.x1,
-    measurement.y2 - measurement.y1,
-  );
-  state.pixelsPerMeter = px / (realCm / 100);
-  updateScaleDisplay();
-  renderMeasurePanel();
-  render();
-  saveProject();
-}
-
-// Hit test a point against existing measurements
-function hitTestMeasurement(x, y) {
-  const threshold = 12;
-  for (const m of state.measurements) {
-    const dx = m.x2 - m.x1;
-    const dy = m.y2 - m.y1;
-    const len = Math.hypot(dx, dy);
-    if (len < 1e-6) continue;
-    const ux = dx / len;
-    const uy = dy / len;
-    const px = -uy;
-    const py = ux;
-    const off = MEASURE_DIM_OFFSET;
-    const ax1 = m.x1 + px * off;
-    const ay1 = m.y1 + py * off;
-    const ax2 = m.x2 + px * off;
-    const ay2 = m.y2 + py * off;
-    if (distToSegment(x, y, ax1, ay1, ax2, ay2) <= threshold) return m;
-    if (distToSegment(x, y, m.x1, m.y1, m.x2, m.y2) <= threshold * 0.6) {
-      return m;
-    }
-  }
-  return null;
-}
-
-// Distance from point to segment
-function distToSegment(px, py, x1, y1, x2, y2) {
-  const dx = x2 - x1;
-  const dy = y2 - y1;
-  const l2 = dx * dx + dy * dy;
-  if (l2 === 0) return Math.hypot(px - x1, py - y1);
-  let tt = ((px - x1) * dx + (py - y1) * dy) / l2;
-  tt = Math.max(0, Math.min(1, tt));
-  return Math.hypot(px - (x1 + tt * dx), py - (y1 + tt * dy));
-}
-
-// Render the measurement sidebar panel
-function renderMeasurePanel() {
-  const panel = document.getElementById("measurePanel");
-  if (!panel) return;
-
-  updateSidebarPanels();
-
-  // Scale input
-  const scaleInput = document.getElementById("measureScale");
-  scaleInput.value = Math.round((state.pixelsPerMeter || DEFAULT_MEASURE_SCALE) * 10) / 10;
-
-  // Type buttons (acts as picker + inline legend)
-  const typesContainer = document.getElementById("measureTypes");
-  typesContainer.innerHTML = MEASUREMENT_TYPES.map(
-    (tp) => `
-    <button
-      type="button"
-      class="measure-type-btn${tp.id === state.measureActiveType ? " active" : ""}"
-      data-type="${tp.id}"
-      style="--tcolor:${tp.color}"
-    >
-      <span class="measure-swatch" style="background:${tp.color}"></span>
-      <span class="measure-code">${tp.code}</span>
-      <span class="measure-type-name">${t("measure." + tp.id)}</span>
-    </button>`,
-  ).join("");
-
-  typesContainer.querySelectorAll(".measure-type-btn").forEach((btn) => {
-    btn.addEventListener("click", () => setActiveMeasureType(btn.dataset.type));
-  });
-
-  // Legend
-  document.getElementById("measureLegend").innerHTML =
-    `<div class="measure-legend-title">${t("measure.legendTitle")} <span class="measure-legend-unit">(${t("measure.legendUnit")})</span></div>` +
-    MEASUREMENT_TYPES.map(
-      (tp) =>
-        `<div class="measure-legend-row"><span class="measure-swatch" style="background:${tp.color}"></span><span class="measure-code">${tp.code}</span><span>${t("measure." + tp.id)}</span></div>`,
-    ).join("") +
-    `<div class="measure-legend-group">${t("measure.obstacleTitle")}</div>` +
-    OBSTACLE_TYPES.map(
-      (tp) =>
-        `<div class="measure-legend-row"><span class="measure-swatch" style="background:${tp.color}"></span><span class="measure-code">${tp.code}</span><span>${t("measure." + tp.id)}</span></div>`,
-    ).join("");
-
-  // Obstacle type buttons
-  const obsTypesContainer = document.getElementById("obstacleTypes");
-  obsTypesContainer.innerHTML = OBSTACLE_TYPES.map(
-    (tp) => `
-    <button
-      type="button"
-      class="measure-type-btn${tp.id === state.obstacleActiveType ? " active" : ""}"
-      data-obstacle-type="${tp.id}"
-      style="--tcolor:${tp.color}"
-    >
-      <span class="measure-swatch" style="background:${tp.color}"></span>
-      <span class="measure-code">${tp.code}</span>
-      <span class="measure-type-name">${t("measure." + tp.id)}</span>
-    </button>`,
-  ).join("");
-  obsTypesContainer
-    .querySelectorAll(".measure-type-btn")
-    .forEach((btn) => {
-      btn.addEventListener("click", () =>
-        setObstacleActiveType(btn.dataset.obstacleType),
-      );
-    });
-  document.getElementById("obstacleHeading").textContent =
-    t("measure.obstacleTitle");
-
-  // Add-obstacle toggle button
-  const addBtn = document.getElementById("addObstacleBtn");
-  addBtn.classList.toggle("active", state.addObstacleMode);
-  addBtn.textContent = (state.addObstacleMode ? "✓ " : "＋ ") + t("measure.addObstacle");
-
-  // Status hint
-  const statusEl = document.getElementById("measureStatus");
-  if (state.addObstacleMode) {
-    statusEl.textContent = state.obstacleDraftStart
-      ? t("measure.obstacleSecondCorner")
-      : t("measure.obstacleFirstCorner");
-  } else if (state.measureDraftStart) {
-    const end = state.measureDraftEnd || state.measureDraftStart;
-    const cm = measurementStrokeCm(
-      state.measureDraftStart.x,
-      state.measureDraftStart.y,
-      end.x,
-      end.y,
-    );
-    statusEl.textContent =
-      t("measure.readyForSecond") +
-      `  →  ${formatLength(cm)}`;
-  } else {
-    statusEl.textContent = t("measure.firstPoint");
-  }
-
-  renderMeasureList();
-  renderObstacleList();
-}
-
-// Render the measurement list
-function renderMeasureList() {
-  const list = document.getElementById("measureList");
-  if (!list) return;
-
-  if (state.measurements.length === 0) {
-    list.innerHTML = `<div class="measure-empty">${t("measure.noMeasurements")}</div>`;
-    return;
-  }
-
-  list.innerHTML = state.measurements
-    .map((m, i) => {
-      const tp = getMeasureType(m.type) || getMeasureType("other");
-      const cm = measurementStrokeCm(m.x1, m.y1, m.x2, m.y2);
-      const selected = state.selectedMeasurement === m ? " selected" : "";
-      return `
-      <div class="measure-item${selected}" data-mid="${m.id}">
-        <div class="measure-item-head">
-          <span class="measure-swatch" style="background:${tp.color}"></span>
-          <span class="measure-code">${tp.code}</span>
-          <span class="measure-item-label">${i + 1}. ${t("measure." + m.type)}</span>
-          <span class="measure-item-dist">${formatLength(cm)}</span>
-        </div>
-        <div class="measure-item-controls">
-          <label class="measure-item-val">${t("measure.valueLabel")}:
-            <input type="number" step="1" min="1" value="${Math.round(cm)}" data-attach="${m.id}" aria-label="length" />
-          </label>
-          <button class="measure-ref-btn" data-id="${m.id}" title="${t("measure.setAsScale")}">⚑</button>
-          <button class="measure-del-btn" data-id="${m.id}" aria-label="${t("measure.delete")}">🗑</button>
-        </div>
-      </div>`;
-    })
-    .join("");
-
-  list.querySelectorAll(".measure-item").forEach((item) => {
-    item.addEventListener("click", (e) => {
-      if (e.target.closest("button")) return;
-      if (e.target.tagName === "INPUT") return;
-      const mid = item.dataset.mid;
-      const m = state.measurements.find((mm) => mm.id === mid);
-      if (m) {
-        state.selectedMeasurement = m;
-        renderMeasureList();
-        render();
-      }
-    });
-  });
-
-  list.querySelectorAll(".measure-ref-btn").forEach((btn) => {
-    btn.addEventListener("click", () => setMeasurementAsScale(btn.dataset.id));
-  });
-
-  list.querySelectorAll(".measure-del-btn").forEach((btn) => {
-    btn.addEventListener("click", () => deleteMeasurement(btn.dataset.id));
-  });
-}
-
 // Ensure the correct sidebar section is visible
 function updateSidebarPanels() {
   const listSection = document.querySelector(".section");
   const propsPanel = document.getElementById("selectedFurniturePanel");
-  const measurePanel = document.getElementById("measurePanel");
+  const roomPanel = document.getElementById("roomPanel");
 
-  if (state.measureMode) {
+  if (state.roomEditorMode) {
     listSection.style.display = "none";
     propsPanel.style.display = "none";
-    measurePanel.style.display = "block";
+    roomPanel.style.display = "block";
   } else if (state.selectedFurniture) {
     listSection.style.display = "none";
     propsPanel.style.display = "block";
-    measurePanel.style.display = "none";
+    roomPanel.style.display = "none";
   } else {
     listSection.style.display = "block";
     propsPanel.style.display = "none";
-    measurePanel.style.display = "none";
+    roomPanel.style.display = "none";
   }
 }
 
@@ -1766,531 +1382,967 @@ function drawMeasureGrid(targetCtx, t) {
   targetCtx.restore();
 }
 
-// Draw all measurements (and the draft while measuring)
-function drawMeasurementsLayer(targetCtx) {
-  state.measurements.forEach((m) => drawMeasurement(m, targetCtx, 1, 0, 0));
-  if (state.measureMode && state.measureDraftStart) {
-    const end = state.measureDraftEnd || state.measureDraftStart;
-    drawMeasurementDraft(targetCtx, state.measureDraftStart, end);
+
+// ========== ROOM EDITOR (PARAMETRIC FLOOR PLANS) ==========
+
+function getRoom(id) {
+  return state.rooms.find((r) => r.id === id);
+}
+
+function toggleRoomEditorMode() {
+  if (state.roomEditorMode) {
+    exitRoomEditorMode();
+  } else {
+    startRoomEditorMode();
   }
 }
 
-// Draw the drafting preview line while placing a measurement
-function drawMeasurementDraft(targetCtx, a, b) {
-  const tp = getMeasureType(state.measureActiveType) || getMeasureType("other");
-  const cm = measurementStrokeCm(a.x, a.y, b.x, b.y);
-  const label = `${tp.code} ${formatLength(cm)}`;
+function startRoomEditorMode() {
+  if (state.calibrationMode) cancelCalibration();
+  if (state.cropMode) cancelCrop();
 
-  targetCtx.save();
-  targetCtx.setLineDash([6, 4]);
-  targetCtx.strokeStyle = tp.color;
-  targetCtx.lineWidth = 1.6;
-  targetCtx.beginPath();
-  targetCtx.moveTo(a.x, a.y);
-  targetCtx.lineTo(b.x, b.y);
-  targetCtx.stroke();
-  targetCtx.setLineDash([]);
+  hideUploadOverlay();
 
-  targetCtx.fillStyle = tp.color;
-  targetCtx.beginPath();
-  targetCtx.arc(a.x, a.y, 4, 0, Math.PI * 2);
-  targetCtx.fill();
-  targetCtx.beginPath();
-  targetCtx.arc(b.x, b.y, 4, 0, Math.PI * 2);
-  targetCtx.fill();
+  state.roomEditorMode = true;
 
-  targetCtx.font = "bold 13px sans-serif";
-  targetCtx.textAlign = "center";
-  targetCtx.textBaseline = "middle";
-  const midX = (a.x + b.x) / 2;
-  const midY = (a.y + b.y) / 2;
-  const tw = targetCtx.measureText(label).width;
-  targetCtx.fillStyle = "rgba(255, 255, 255, 0.85)";
-  targetCtx.fillRect(midX - tw / 2 - 4, midY - 18, tw + 8, 20);
-  targetCtx.fillStyle = tp.color;
-  targetCtx.fillText(label, midX, midY - 8);
-  targetCtx.restore();
+  canvas.style.cursor = "grab";
+  const btn = document.getElementById("roomBtn");
+  btn.classList.add("active");
+  btn.setAttribute("aria-pressed", "true");
+
+  renderRoomPanel();
+  render();
 }
 
-// Draw a single measurement as a CAD-style dimension
-function drawMeasurement(m, targetCtx, s, ox, oy) {
-  const tp = getMeasureType(m.type) || getMeasureType("other");
-  const selected = state.selectedMeasurement === m;
-  const color = selected ? "#FF1493" : tp.color;
+function exitRoomEditorMode() {
+  state.roomEditorMode = false;
+  state.draggingRoomId = null;
+  state.roomDragGrab = null;
 
-  const x1 = m.x1 * s + ox;
-  const y1 = m.y1 * s + oy;
-  const x2 = m.x2 * s + ox;
-  const y2 = m.y2 * s + oy;
-  const dx = x2 - x1;
-  const dy = y2 - y1;
-  const len = Math.hypot(dx, dy);
-  if (len < 1e-6) return;
+  canvas.style.cursor = "grab";
+  const btn = document.getElementById("roomBtn");
+  btn.classList.remove("active");
+  btn.setAttribute("aria-pressed", "false");
 
-  const ux = dx / len;
-  const uy = dy / len;
-  const px = -uy;
-  const py = ux;
-  const off = MEASURE_DIM_OFFSET * s;
-  const ext = MEASURE_EXT_LEN * s;
-  const lw = (selected ? 2.2 : 1.5) * s;
-  const arrowLen = 7 * s;
+  updateSidebarPanels();
+  updateSelectedFurniturePanel();
+  render();
+}
 
-  targetCtx.save();
+// --- Geometry helpers (all room geometry is stored in centimeters) ---
 
-  // Wall trace (thick line along the wall for room outlines)
-  if (tp.id === "wall") {
-    targetCtx.strokeStyle = "#2c3e50";
-    targetCtx.lineWidth = 5 * s;
-    targetCtx.lineCap = "round";
-    targetCtx.beginPath();
-    targetCtx.moveTo(x1, y1);
-    targetCtx.lineTo(x2, y2);
-    targetCtx.stroke();
+function roomPxScale() {
+  return (state.pixelsPerMeter || DEFAULT_MEASURE_SCALE) / 100; // px per cm
+}
+
+// Interior face of a wall, measured clockwise around the room perimeter.
+// `offset` of fixtures is measured from `a` towards `b`.
+function roomWallSegment(r, wall) {
+  const w = r.widthCm;
+  const d = r.depthCm;
+  switch (wall) {
+    case "top":
+      return { a: { x: r.x, y: r.y }, b: { x: r.x + w, y: r.y } };
+    case "right":
+      return { a: { x: r.x + w, y: r.y }, b: { x: r.x + w, y: r.y + d } };
+    case "bottom":
+      return { a: { x: r.x + w, y: r.y + d }, b: { x: r.x, y: r.y + d } };
+    case "left":
+      return { a: { x: r.x, y: r.y + d }, b: { x: r.x, y: r.y } };
   }
-
-  // Extension ticks
-  targetCtx.strokeStyle = color;
-  targetCtx.lineWidth = lw;
-  [
-    [x1, y1],
-    [x2, y2],
-  ].forEach((p) => {
-    const ex1x = p[0] + px * (off - ext);
-    const ex1y = p[1] + py * (off - ext);
-    const ex2x = p[0] + px * (off + ext * 0.8);
-    const ex2y = p[1] + py * (off + ext * 0.8);
-    targetCtx.beginPath();
-    targetCtx.moveTo(ex1x, ex1y);
-    targetCtx.lineTo(ex2x, ex2y);
-    targetCtx.stroke();
-  });
-
-  // Dimension line (offset from the measured segment)
-  const ax1 = x1 + px * off;
-  const ay1 = y1 + py * off;
-  const ax2 = x2 + px * off;
-  const ay2 = y2 + py * off;
-  targetCtx.beginPath();
-  targetCtx.moveTo(ax1, ay1);
-  targetCtx.lineTo(ax2, ay2);
-  targetCtx.stroke();
-
-  // Arrowheads pointing inward
-  drawArrowTip(targetCtx, ax1, ay1, ax2, ay2, arrowLen, color);
-  drawArrowTip(targetCtx, ax2, ay2, ax1, ay1, arrowLen, color);
-
-  // Endpoint markers
-  targetCtx.fillStyle = color;
-  [
-    [x1, y1],
-    [x2, y2],
-  ].forEach((p) => {
-    targetCtx.beginPath();
-    targetCtx.arc(p[0], p[1], 3.2 * s, 0, Math.PI * 2);
-    targetCtx.fill();
-  });
-
-  // Label with white halo
-  const label = `${tp.code} ${formatLength(measurementStrokeCm(m.x1, m.y1, m.x2, m.y2))}`;
-  targetCtx.font = `bold ${Math.max(11, 13 * s)}px sans-serif`;
-  targetCtx.textAlign = "center";
-  targetCtx.textBaseline = "middle";
-  const midX = (ax1 + ax2) / 2;
-  const midY = (ay1 + ay2) / 2;
-  const labelY = midY - 7 * s;
-  const tw = targetCtx.measureText(label).width;
-  targetCtx.fillStyle = "rgba(255, 255, 255, 0.85)";
-  targetCtx.fillRect(midX - tw / 2 - 4 * s, labelY - 9 * s, tw + 8 * s, 18 * s);
-  targetCtx.fillStyle = color;
-  targetCtx.fillText(label, midX, labelY);
-
-  targetCtx.restore();
 }
 
-// Draw a filled arrowhead pointing from tip toward the target point
-function drawArrowTip(targetCtx, tipX, tipY, towardX, towardY, size, color) {
-  const dx = towardX - tipX;
-  const dy = towardY - tipY;
+function roomWallLength(r, wall) {
+  return wall === "top" || wall === "bottom" ? r.widthCm : r.depthCm;
+}
+
+// Outward (away from the interior) unit normal of each wall.
+function roomWallNormal(r, wall) {
+  switch (wall) {
+    case "top":
+      return { x: 0, y: -1 };
+    case "right":
+      return { x: 1, y: 0 };
+    case "bottom":
+      return { x: 0, y: 1 };
+    case "left":
+      return { x: -1, y: 0 };
+  }
+}
+
+function roomCorners(r) {
+  const w = r.widthCm;
+  const d = r.depthCm;
+  return {
+    tl: { x: r.x, y: r.y },
+    tr: { x: r.x + w, y: r.y },
+    br: { x: r.x + w, y: r.y + d },
+    bl: { x: r.x, y: r.y + d },
+  };
+}
+
+// Center of an opening along a wall: {t} = tangent offset from wall start,
+// {p} = midpoint in world cm.
+function fixtureCenter(r, wall, fx) {
+  const seg = roomWallSegment(r, wall);
+  const dx = seg.b.x - seg.a.x;
+  const dy = seg.b.y - seg.a.y;
   const len = Math.hypot(dx, dy) || 1;
   const ux = dx / len;
   const uy = dy / len;
-  const px = -uy;
-  const py = ux;
-  targetCtx.fillStyle = color;
-  targetCtx.beginPath();
-  targetCtx.moveTo(tipX, tipY);
-  targetCtx.lineTo(
-    tipX - ux * size + px * size * 0.45,
-    tipY - uy * size + py * size * 0.45,
-  );
-  targetCtx.lineTo(
-    tipX - ux * size - px * size * 0.45,
-    tipY - uy * size - py * size * 0.45,
-  );
-  targetCtx.closePath();
-  targetCtx.fill();
+  const t = fx.offsetCm + fx.widthCm / 2;
+  return { t, x: seg.a.x + ux * t, y: seg.a.y + uy * t };
 }
 
-// ========== FIXED INSTALLATIONS / OBSTRUCTIONS ==========
-
-function escapeHtml(str) {
-  return String(str).replace(
-    /[&<>"']/g,
-    (c) =>
-      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
-        c
-      ],
-  );
-}
-
-function getObstacleType(typeId) {
-  return OBSTACLE_TYPES.find((tp) => tp.id === typeId);
-}
-
-function setObstacleActiveType(typeId) {
-  if (!getObstacleType(typeId)) return;
-  state.obstacleActiveType = typeId;
-  renderMeasurePanel();
-}
-
-function toggleAddObstacleMode() {
-  if (state.addObstacleMode) {
-    exitAddObstacleMode();
-  } else {
-    startAddObstacleMode();
-  }
-}
-
-function startAddObstacleMode() {
-  state.addObstacleMode = true;
-  state.obstacleDraftStart = null;
-  state.obstacleDraftEnd = null;
-  // cancel any pending measurement draft so modes don't mix
-  state.measureDraftStart = null;
-  state.measureDraftEnd = null;
-  state.selectedMeasurement = null;
-  state.selectedObstacle = null;
-  canvas.style.cursor = "crosshair";
-  renderMeasurePanel();
-  render();
-}
-
-function exitAddObstacleMode() {
-  state.addObstacleMode = false;
-  state.obstacleDraftStart = null;
-  state.obstacleDraftEnd = null;
-  canvas.style.cursor = "crosshair";
-  renderMeasurePanel();
-  render();
-}
-
-function cancelObstacleDraft() {
-  state.obstacleDraftStart = null;
-  state.obstacleDraftEnd = null;
-  renderMeasurePanel();
-  render();
-}
-
-// Add a rectangular obstacle from two diagonal corner points
-function addObstacle(type, x1, y1, x2, y2) {
-  const w = Math.abs(x2 - x1);
-  const h = Math.abs(y2 - y1);
-  if (w < 3 || h < 3) return null;
-  if (!getObstacleType(type)) type = DEFAULT_OBSTACLE_TYPE;
+function addRoom(x, y, widthCm, depthCm, ceilingHeightCm) {
   pushUndoState();
-  const obstacle = {
+  const room = {
     id: Date.now() + "_" + Math.random().toString(36).slice(2, 7),
-    type,
-    x: (x1 + x2) / 2,
-    y: (y1 + y2) / 2,
-    widthPx: w,
-    heightPx: h,
-    name: t("measure." + type),
+    x,
+    y,
+    widthCm,
+    depthCm,
+    ceilingHeightCm: ceilingHeightCm || null,
+    fixtures: [],
   };
-  state.obstacles.push(obstacle);
-  state.selectedObstacle = obstacle;
+  state.rooms.push(room);
+  state.selectedRoomId = room.id;
+  state.selectedWall = "top";
+  state.selectedFixtureId = null;
   markChanges();
   saveProject();
-  renderMeasurePanel();
+  renderRoomPanel();
   render();
-  return obstacle;
+  return room;
 }
 
-function hitTestObstacle(x, y) {
-  for (const ob of state.obstacles) {
-    const w = ob.widthPx / 2;
-    const h = ob.heightPx / 2;
-    if (Math.abs(x - ob.x) <= w && Math.abs(y - ob.y) <= h) return ob;
+function addDefaultRoom() {
+  const rect = canvas.getBoundingClientRect();
+  const c = screenToCanvas(rect.left + rect.width / 2, rect.top + rect.height / 2);
+  const pxScale = roomPxScale();
+  return addRoom(
+    c.x / pxScale - DEFAULT_ROOM_WIDTH_CM / 2,
+    c.y / pxScale - DEFAULT_ROOM_DEPTH_CM / 2,
+    DEFAULT_ROOM_WIDTH_CM,
+    DEFAULT_ROOM_DEPTH_CM,
+    260,
+  );
+}
+
+function deleteRoom(id) {
+  const idx = state.rooms.findIndex((r) => r.id === id);
+  if (idx < 0) return;
+  if (!confirm(t("room.deleteConfirm"))) return;
+  pushUndoState();
+  state.rooms.splice(idx, 1);
+  if (state.selectedRoomId === id) {
+    state.selectedRoomId = null;
+    state.selectedWall = null;
+    state.selectedFixtureId = null;
+  }
+  markChanges();
+  saveProject();
+  renderRoomPanel();
+  render();
+}
+
+function clearRooms() {
+  if (!state.rooms.length) return;
+  if (!confirm(t("room.clearAllConfirm"))) return;
+  pushUndoState();
+  state.rooms = [];
+  state.selectedRoomId = null;
+  state.selectedWall = null;
+  state.selectedFixtureId = null;
+  markChanges();
+  saveProject();
+  renderRoomPanel();
+  render();
+}
+
+// Update a numeric property of a room (width / depth / ceiling)
+function updateRoomField(id, field, value) {
+  const r = getRoom(id);
+  if (!r) return;
+  const cm = parseFloat(value);
+  if (!Number.isFinite(cm) || cm <= 0) return;
+  if (field === "width") r.widthCm = cm;
+  else if (field === "depth") r.depthCm = cm;
+  else if (field === "ceiling" && cm > 0) r.ceilingHeightCm = cm;
+  // keep fixtures inside the wall
+  r.fixtures.forEach((fx) => {
+    if (fx.type !== "chimney") {
+      const len = roomWallLength(r, fx.wall);
+      fx.offsetCm = Math.min(fx.offsetCm, Math.max(0, len - fx.widthCm));
+    }
+  });
+  markChanges();
+  saveProject();
+  renderRoomPanel();
+  render();
+}
+
+function setWallThickness(value) {
+  const cm = parseFloat(value);
+  if (!Number.isFinite(cm) || cm <= 0) return;
+  state.wallThicknessCm = cm;
+  markChanges();
+  saveProject();
+  renderRoomPanel();
+  render();
+}
+
+// --- Fixtures (door / window / heater / chimney) ---
+
+function addFixture(roomId, wall, type) {
+  const r = getRoom(roomId);
+  if (!r) return;
+  if (!ROOM_FIXTURE_TYPES.includes(type)) return;
+  const len = roomWallLength(r, wall);
+  let fx = { id: Date.now() + "_" + Math.random().toString(36).slice(2, 7), type, wall };
+  if (type === "door") {
+    fx.offsetCm = 0;
+    fx.widthCm = Math.min(80, len);
+  } else if (type === "window") {
+    fx.offsetCm = 0;
+    fx.widthCm = Math.min(120, len);
+    fx.boardDepthCm = 20;
+  } else if (type === "heater") {
+    fx.offsetCm = 0;
+    fx.widthCm = Math.min(90, len);
+    fx.depthCm = 30;
+  } else if (type === "chimney") {
+    fx.corner = wall; // reuse wall param as corner id
+    fx.widthCm = 45;
+    fx.depthCm = 45;
+    fx.wall = "corner";
+  }
+  if (fx.wall !== "corner") {
+    fx.offsetCm = Math.min(fx.offsetCm, Math.max(0, len - fx.widthCm));
+  }
+  pushUndoState();
+  r.fixtures.push(fx);
+  state.selectedWall = fx.wall === "corner" ? state.selectedWall : wall;
+  state.selectedFixtureId = fx.id;
+  markChanges();
+  saveProject();
+  renderRoomPanel();
+  render();
+}
+
+function deleteFixture(roomId, fiscalId) {
+  const r = getRoom(roomId);
+  if (!r) return;
+  const idx = r.fixtures.findIndex((f) => f.id === fiscalId);
+  if (idx < 0) return;
+  pushUndoState();
+  r.fixtures.splice(idx, 1);
+  if (state.selectedFixtureId === fiscalId) state.selectedFixtureId = null;
+  markChanges();
+  saveProject();
+  renderRoomPanel();
+  render();
+}
+
+function updateFixtureField(roomId, fiscalId, field, value) {
+  const r = getRoom(roomId);
+  if (!r) return;
+  const fx = r.fixtures.find((f) => f.id === fiscalId);
+  if (!fx) return;
+  const cm = parseFloat(value);
+  if (!Number.isFinite(cm) || cm <= 0) return;
+  if (field === "width") fx.widthCm = cm;
+  else if (field === "offset") fx.offsetCm = cm;
+  else if (field === "depth") fx.depthCm = cm;
+  else if (field === "board") fx.boardDepthCm = cm;
+  if (fx.type === "chimney") {
+    fx.widthCm = Math.max(fx.widthCm, fx.depthCm); // keep square-ish elsewhere? no-op
+  } else {
+    const len = roomWallLength(r, fx.wall);
+    fx.offsetCm = Math.min(fx.offsetCm, Math.max(0, len - fx.widthCm));
+  }
+  markChanges();
+  saveProject();
+  renderRoomPanel();
+  render();
+}
+
+function selectRoom(id) {
+  const r = getRoom(id);
+  if (!r) return;
+  state.selectedRoomId = id;
+  state.selectedWall = state.selectedWall && roomWallLength(r, state.selectedWall) ? state.selectedWall : "top";
+  state.selectedFixtureId = null;
+  renderRoomPanel();
+  render();
+}
+
+// --- Hit testing (world/px space) ---
+
+function hitTestRooms(x, y) {
+  const THRESH = 12;
+  for (const r of state.rooms) {
+    const x0 = cmToPixels(r.x);
+    const y0 = cmToPixels(r.y);
+    const w = cmToPixels(r.widthCm);
+    const d = cmToPixels(r.depthCm);
+    const walls = {
+      top: [[x0, y0], [x0 + w, y0]],
+      right: [[x0 + w, y0], [x0 + w, y0 + d]],
+      bottom: [[x0 + w, y0 + d], [x0, y0 + d]],
+      left: [[x0, y0 + d], [x0, y0]],
+    };
+    for (const wall in walls) {
+      const p = walls[wall];
+      if (
+        distToSegment(x, y, p[0][0], p[0][1], p[1][0], p[1][1]) <= THRESH
+      ) {
+        return { room: r, wall };
+      }
+    }
+    if (x >= x0 && x <= x0 + w && y >= y0 && y <= y0 + d) {
+      return { room: r };
+    }
   }
   return null;
 }
 
-function deleteObstacle(id) {
-  const index = state.obstacles.findIndex((o) => o.id === id);
-  if (index < 0) return;
-  if (!confirm(t("measure.obstacleDeleteConfirm"))) return;
+// --- Drag + snapping (wall thickness between rooms, door-to-door) ---
+
+function startRoomDrag(room, grabCm) {
+  state.draggingRoomId = room.id;
+  state.roomDragGrab = grabCm;
   pushUndoState();
-  state.obstacles.splice(index, 1);
-  if (state.selectedObstacle && state.selectedObstacle.id === id) {
-    state.selectedObstacle = null;
-  }
+}
+
+function moveRoomDragTo(canvasPoint) {
+  const r = getRoom(state.draggingRoomId);
+  if (!r) return;
+  const pxScale = roomPxScale();
+  const nx = canvasPoint.x / pxScale - state.roomDragGrab.dx;
+  const ny = canvasPoint.y / pxScale - state.roomDragGrab.dy;
+  const snap = snapRoomPosition(r, nx, ny);
+  r.x = Math.round(snap.x);
+  r.y = Math.round(snap.y);
   markChanges();
-  saveProject();
-  renderMeasurePanel();
   render();
 }
 
-function clearObstacles() {
-  if (!state.obstacles.length) return;
-  if (!confirm(t("measure.obstacleClearConfirm"))) return;
-  pushUndoState();
-  state.obstacles = [];
-  state.selectedObstacle = null;
-  markChanges();
-  saveProject();
-  renderMeasurePanel();
-  render();
+function endRoomDrag() {
+  if (state.draggingRoomId) saveProject();
+  state.draggingRoomId = null;
+  state.roomDragGrab = null;
 }
 
-// Update a single property (name / width-cm / depth-cm) of an obstacle
-function updateObstacleField(id, field, value) {
-  const ob = state.obstacles.find((o) => o.id === id);
-  if (!ob) return;
-  const ppm = state.pixelsPerMeter || DEFAULT_MEASURE_SCALE;
-  let changed = false;
-  if (field === "name") {
-    ob.name = value;
-    changed = true;
-  } else {
-    const cm = parseFloat(value);
-    if (Number.isFinite(cm) && cm > 0) {
-      if (field === "width") {
-        ob.widthPx = (cm / 100) * ppm;
-      } else if (field === "depth") {
-        ob.heightPx = (cm / 100) * ppm;
-      }
-      changed = true;
+function snapRoomPosition(room, nx, ny) {
+  const T = state.wallThicknessCm;
+  const tolP = ROOM_SNAP_TOLERANCE_CM;
+  const tolD = ROOM_DOOR_SNAP_TOLERANCE_CM;
+  let px = nx;
+  let py = ny;
+  const rw = room.widthCm;
+  const rd = room.depthCm;
+
+  for (const other of state.rooms) {
+    if (other.id === room.id) continue;
+    const ox = other.x;
+    const oy = other.y;
+    const ow = other.widthCm;
+    const od = other.depthCm;
+
+    const rL = px, rR = px + rw, rT = py, rB = py + rd;
+    const oL = ox, oR = ox + ow, oT = oy, oB = oy + od;
+    const yOverlap = Math.min(rB, oB) - Math.max(rT, oT);
+    const xOverlap = Math.min(rR, oR) - Math.max(rL, oL);
+
+    let facingWallA = null; // other's wall facing this room
+    let facingWallB = null; // this room's wall facing other
+    let snapped = false;
+
+    // Vertical faces adjacent (this room right of other, or left of other)
+    if (!snapped && Math.abs(rL - (oR + T)) <= tolP && yOverlap > T) {
+      px = oR + T; snapped = true; facingWallA = "right"; facingWallB = "left";
+    } else if (!snapped && Math.abs((oL - T) - rR) <= tolP && yOverlap > T) {
+      px = oL - T - rw; snapped = true; facingWallA = "left"; facingWallB = "right";
+    }
+    // Horizontal faces adjacent (this room below / above other)
+    if (!snapped && Math.abs(rT - (oB + T)) <= tolP && xOverlap > T) {
+      py = oB + T; snapped = true; facingWallA = "bottom"; facingWallB = "top";
+    } else if (!snapped && Math.abs((oT - T) - rB) <= tolP && xOverlap > T) {
+      py = oT - T - rd; snapped = true; facingWallA = "top"; facingWallB = "bottom";
+    }
+    if (!snapped) continue;
+
+    // Door alignment along the tangent of the shared wall
+    const myDoor = room.fixtures.find((f) => f.type === "door" && f.wall === facingWallB);
+    const otherDoor = other.fixtures.find((f) => f.type === "door" && f.wall === facingWallA);
+    if (myDoor && otherDoor && facingWallB === "left" && facingWallA === "right") {
+      // both vertical; offsets measured: room left wall start at bottom-left going +up (=-y)
+      const myT = myDoor.offsetCm + myDoor.widthCm / 2;
+      const ot = otherDoor.offsetCm + otherDoor.widthCm / 2;
+      // room center y = (y+rd) - myT ; other center y = oy + ot
+      const targetY = oy + ot + myT - rd;
+      if (Math.abs(targetY - py) <= tolD) py = targetY;
+    } else if (myDoor && otherDoor && facingWallB === "right" && facingWallA === "left") {
+      const myT = myDoor.offsetCm + myDoor.widthCm / 2;
+      const ot = otherDoor.offsetCm + otherDoor.widthCm / 2;
+      // room right wall start at top-right going down (+y): center y = y + myT
+      // other left wall start bottom-left going up: center y = (oy+od) - ot
+      const targetY = oy + od - ot - myT;
+      if (Math.abs(targetY - py) <= tolD) py = targetY;
+    } else if (myDoor && otherDoor && facingWallB === "top" && facingWallA === "bottom") {
+      const myT = myDoor.offsetCm + myDoor.widthCm / 2;
+      const ot = otherDoor.offsetCm + otherDoor.widthCm / 2;
+      // room top wall start top-left going right (+x): center x = x + myT
+      // other bottom wall start bottom-right going left: center x = (ox+ow) - ot
+      const targetX = ox + ow - ot - myT;
+      if (Math.abs(targetX - px) <= tolD) px = targetX;
+    } else if (myDoor && otherDoor && facingWallB === "bottom" && facingWallA === "top") {
+      const myT = myDoor.offsetCm + myDoor.widthCm / 2;
+      const ot = otherDoor.offsetCm + otherDoor.widthCm / 2;
+      // room bottom wall start bottom-right going left: center x = (x+rw) - myT
+      // other top wall start top-left going right: center x = ox + ot
+      const targetX = ox + ot + myT - rw;
+      if (Math.abs(targetX - px) <= tolD) px = targetX;
     }
   }
-  if (!changed) return;
-  markChanges();
-  saveProject();
-  renderMeasurePanel();
+  return { x: px, y: py };
+}
+
+// --- Rendering ---
+
+function drawRoomsLayer(targetCtx, withDims) {
+  if (!state.rooms.length) return;
+  state.rooms.forEach((r) => drawRoom(r, targetCtx, withDims));
+}
+
+function drawRoom(r, targetCtx, withDims) {
+  const pxScale = roomPxScale();
+  const T = cmToPixels(state.wallThicknessCm);
+  const selected = r.id === state.selectedRoomId;
+
+  for (const wall of ROOM_WALL_TYPES) {
+    drawRoomWall(r, wall, targetCtx, T, pxScale);
+  }
+
+  // Fixtures (drawn on top of the wall bands)
+  r.fixtures.forEach((fx) => drawFixture(r, fx, targetCtx, pxScale));
+
+  // Selection highlight
+  if (selected) {
+    const x0 = cmToPixels(r.x);
+    const y0 = cmToPixels(r.y);
+    const w = cmToPixels(r.widthCm);
+    const d = cmToPixels(r.depthCm);
+    targetCtx.save();
+    targetCtx.setLineDash([5, 4]);
+    targetCtx.strokeStyle = "#FF1493";
+    targetCtx.lineWidth = 2;
+    targetCtx.strokeRect(x0, y0, w, d);
+    if (state.selectedWall) {
+      const seg = roomWallSegment(r, state.selectedWall);
+      const a = cmToPixels(seg.a.x), b = cmToPixels(seg.b.x), a2 = cmToPixels(seg.a.y), b2 = cmToPixels(seg.b.y);
+      targetCtx.setLineDash([]);
+      targetCtx.strokeStyle = "#FF1493";
+      targetCtx.lineWidth = 3;
+      targetCtx.beginPath();
+      targetCtx.moveTo(a, a2);
+      targetCtx.lineTo(b, b2);
+      targetCtx.stroke();
+    }
+    targetCtx.restore();
+  }
+
+  if (withDims) drawRoomDimensions(r, targetCtx, T, pxScale);
+}
+
+function drawRoomWall(r, wall, targetCtx, T, pxScale) {
+  const seg = roomWallSegment(r, wall);
+  const a = { x: cmToPixels(seg.a.x), y: cmToPixels(seg.a.y) };
+  const b = { x: cmToPixels(seg.b.x), y: cmToPixels(seg.b.y) };
+  const lenCm = roomWallLength(r, wall);
+  const plen = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+  const ux = (b.x - a.x) / plen;
+  const uy = (b.y - a.y) / plen;
+  const openings = r.fixtures.filter(
+    (f) => f.wall === wall && (f.type === "door" || f.type === "window"),
+  );
+
+  targetCtx.save();
+  targetCtx.lineCap = "butt";
+  targetCtx.lineWidth = T;
+  targetCtx.strokeStyle = ROOM_WALL_COLOR;
+
+  // Wall segments excluding openings
+  const pts = [0];
+  openings.forEach((f) => pts.push(f.offsetCm, f.offsetCm + f.widthCm));
+  pts.push(lenCm);
+  for (let i = 0; i < pts.length - 1; i += 2) {
+    const s = Math.max(0, pts[i]);
+    const e = Math.min(lenCm, pts[i + 1]);
+    if (e - s < 0.1) continue;
+    targetCtx.beginPath();
+    targetCtx.moveTo(a.x + ux * s * pxScale, a.y + uy * s * pxScale);
+    targetCtx.lineTo(a.x + ux * e * pxScale, a.y + uy * e * pxScale);
+    targetCtx.stroke();
+  }
+
+  // Interior face line (thin reveal) including openings
+  targetCtx.lineWidth = 1.2;
+  targetCtx.strokeStyle = "rgba(255,255,255,0.85)";
+  targetCtx.beginPath();
+  targetCtx.moveTo(a.x, a.y);
+  targetCtx.lineTo(b.x, b.y);
+  targetCtx.stroke();
+  targetCtx.restore();
+}
+
+function drawFixture(r, fx, targetCtx, pxScale) {
+  const selected = fx.id === state.selectedFixtureId;
+  const color = selected ? "#FF1493" : ROOM_COLORS[fx.type] || "#7f8c8d";
+
+  if (fx.type === "chimney") {
+    drawChimney(r, fx, targetCtx, pxScale);
+    return;
+  }
+
+  const seg = roomWallSegment(r, fx.wall);
+  const a = { x: cmToPixels(seg.a.x), y: cmToPixels(seg.a.y) };
+  const b = { x: cmToPixels(seg.b.x), y: cmToPixels(seg.b.y) };
+  const lenCm = roomWallLength(r, fx.wall);
+  const plen = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+  const ux = (b.x - a.x) / plen;
+  const uy = (b.y - a.y) / plen;
+  const n = roomWallNormal(r, fx.wall);
+  const o1 = fx.offsetCm * pxScale;
+  const o2 = (fx.offsetCm + fx.widthCm) * pxScale;
+  const p1 = { x: a.x + ux * o1, y: a.y + uy * o1 };
+  const p2 = { x: a.x + ux * o2, y: a.y + uy * o2 };
+  const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+  const T = cmToPixels(state.wallThicknessCm);
+
+  targetCtx.save();
+  if (fx.type === "window") {
+    // opening reveal
+    targetCtx.strokeStyle = color;
+    targetCtx.lineWidth = 1.4;
+    targetCtx.beginPath();
+    targetCtx.moveTo(p1.x, p1.y);
+    targetCtx.lineTo(p2.x, p2.y);
+    targetCtx.stroke();
+    // glass lines perpendicular to the wall
+    targetCtx.lineWidth = 1;
+    const nwx = -uy;
+    const nwy = ux;
+    for (let k = 1; k <= 3; k++) {
+      const g = {
+        x: p1.x + ux * (o2 - o1) * (k / 4),
+        y: p1.y + uy * (o2 - o1) * (k / 4),
+      };
+      targetCtx.beginPath();
+      targetCtx.moveTo(g.x - nwx * 4, g.y - nwy * 4);
+      targetCtx.lineTo(g.x + nwx * 4, g.y + nwy * 4);
+      targetCtx.stroke();
+    }
+    // window board (ledge protruding into the room)
+    if (fx.boardDepthCm > 0) {
+      const bd = fx.boardDepthCm * pxScale;
+      targetCtx.fillStyle = "rgba(243,156,18,0.28)";
+      targetCtx.strokeStyle = "rgba(243,156,18,0.6)";
+      targetCtx.lineWidth = 1;
+      targetCtx.beginPath();
+      targetCtx.moveTo(p1.x, p1.y);
+      targetCtx.lineTo(p1.x - n.x * bd, p1.y - n.y * bd);
+      targetCtx.lineTo(p2.x - n.x * bd, p2.y - n.y * bd);
+      targetCtx.lineTo(p2.x, p2.y);
+      targetCtx.closePath();
+      targetCtx.fill();
+      targetCtx.stroke();
+      targetCtx.fillStyle = color;
+      targetCtx.font = "bold 10px sans-serif";
+      targetCtx.textAlign = "center";
+      targetCtx.textBaseline = "middle";
+      targetCtx.fillText(
+        fx.boardDepthCm + " cm",
+        mid.x - n.x * (bd / 2),
+        mid.y - n.y * (bd / 2),
+      );
+    }
+  } else if (fx.type === "door") {
+    // hinge at p2, leaf swings into the room across the opening
+    const leafLen = o2 - o1;
+    const hinge = p2;
+    const leafEnd = { x: hinge.x - n.x * leafLen, y: hinge.y - n.y * leafLen };
+    targetCtx.strokeStyle = color;
+    targetCtx.lineWidth = 2;
+    targetCtx.beginPath();
+    targetCtx.moveTo(hinge.x, hinge.y);
+    targetCtx.lineTo(leafEnd.x, leafEnd.y);
+    targetCtx.stroke();
+    // swing arc
+    targetCtx.lineWidth = 1;
+    const ang = Math.atan2(n.y, n.x);
+    targetCtx.beginPath();
+    targetCtx.arc(hinge.x, hinge.y, leafLen, ang - Math.PI / 2, ang);
+    targetCtx.stroke();
+  } else if (fx.type === "heater") {
+    const dp = fx.depthCm * pxScale || cmToPixels(30);
+    targetCtx.beginPath();
+    targetCtx.moveTo(p1.x, p1.y);
+    targetCtx.lineTo(p1.x - n.x * dp, p1.y - n.y * dp);
+    targetCtx.lineTo(p2.x - n.x * dp, p2.y - n.y * dp);
+    targetCtx.lineTo(p2.x, p2.y);
+    targetCtx.closePath();
+    targetCtx.fillStyle = color;
+    targetCtx.globalAlpha = 0.28;
+    targetCtx.fill();
+    targetCtx.strokeStyle = color;
+    targetCtx.lineWidth = 1.4;
+    targetCtx.globalAlpha = 0.6;
+    targetCtx.stroke();
+    targetCtx.globalAlpha = 1;
+    targetCtx.save();
+    targetCtx.clip();
+    targetCtx.strokeStyle = color;
+    targetCtx.lineWidth = 1;
+    const step = Math.max(8, dp / 4);
+    for (let lx = p1.x - dp; lx < p2.x + dp; lx += step) {
+      targetCtx.beginPath();
+      targetCtx.moveTo(lx, p1.y);
+      targetCtx.lineTo(lx + dp, p1.y - dp);
+      targetCtx.stroke();
+    }
+    targetCtx.restore();
+  }
+  targetCtx.restore();
+}
+
+function drawChimney(r, fx, targetCtx, pxScale) {
+  const corners = roomCorners(r);
+  const c = corners[fx.corner];
+  const cxp = cmToPixels(c.x);
+  const cyp = cmToPixels(c.y);
+  const dirX = fx.corner === "tl" || fx.corner === "bl" ? 1 : -1;
+  const dirY = fx.corner === "tl" || fx.corner === "tr" ? 1 : -1;
+  const w = fx.widthCm * pxScale;
+  const d = fx.depthCm * pxScale;
+  const x0 = dirX > 0 ? cxp : cxp - w;
+  const y0 = dirY > 0 ? cyp : cyp - d;
+  const color = fx.id === state.selectedFixtureId ? "#FF1493" : ROOM_COLORS.chimney;
+
+  targetCtx.save();
+  targetCtx.fillStyle = color;
+  targetCtx.globalAlpha = 0.3;
+  targetCtx.fillRect(x0, y0, w, d);
+  targetCtx.globalAlpha = 1;
+  targetCtx.strokeStyle = color;
+  targetCtx.lineWidth = 1.6;
+  targetCtx.strokeRect(x0, y0, w, d);
+  targetCtx.globalAlpha = 0.7;
+  targetCtx.lineWidth = 1;
+  for (let lx = x0; lx < x0 + w + d; lx += 12) {
+    targetCtx.beginPath();
+    targetCtx.moveTo(lx, y0 + d);
+    targetCtx.lineTo(lx + d, y0);
+    targetCtx.stroke();
+  }
+  targetCtx.globalAlpha = 1;
+  // label
+  targetCtx.fillStyle = "#2c3e50";
+  targetCtx.font = "bold 11px sans-serif";
+  targetCtx.textAlign = "center";
+  targetCtx.textBaseline = "middle";
+  targetCtx.fillText(`${fx.widthCm} × ${fx.depthCm} cm`, x0 + w / 2, y0 + d / 2);
+  targetCtx.restore();
+}
+
+// Automatic dimensions: wall lengths on the outside, openings on the inside
+function drawRoomDimensions(r, targetCtx, T, pxScale) {
+  targetCtx.save();
+  for (const wall of ROOM_WALL_TYPES) {
+    const seg = roomWallSegment(r, wall);
+    const a = { x: cmToPixels(seg.a.x), y: cmToPixels(seg.a.y) };
+    const b = { x: cmToPixels(seg.b.x), y: cmToPixels(seg.b.y) };
+    const n = roomWallNormal(r, wall);
+    const off = T / 2 + 16;
+    const outA = { x: a.x + n.x * off, y: a.y + n.y * off };
+    const outB = { x: b.x + n.x * off, y: b.y + n.y * off };
+    const label = formatLength(roomWallLength(r, wall));
+    drawRoomDim(targetCtx, outA.x, outA.y, outB.x, outB.y, label, "#7f8c8d");
+  }
+  r.fixtures.forEach((fx) => {
+    if (fx.type === "chimney") return;
+    const seg = roomWallSegment(r, fx.wall);
+    const a = { x: cmToPixels(seg.a.x), y: cmToPixels(seg.a.y) };
+    const b = { x: cmToPixels(seg.b.x), y: cmToPixels(seg.b.y) };
+    const lenCm = roomWallLength(r, fx.wall);
+    const plen = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+    const ux = (b.x - a.x) / plen;
+    const uy = (b.y - a.y) / plen;
+    const n = roomWallNormal(r, fx.wall);
+    const color = ROOM_COLORS[fx.type] || "#7f8c8d";
+    const p1 = { x: a.x + ux * fx.offsetCm * pxScale, y: a.y + uy * fx.offsetCm * pxScale };
+    const p2 = {
+      x: a.x + ux * (fx.offsetCm + fx.widthCm) * pxScale,
+      y: a.y + uy * (fx.offsetCm + fx.widthCm) * pxScale,
+    };
+    // dim from wall start to opening start, just inside the wall
+    const inA = { x: a.x - n.x * (T / 2 + 8), y: a.y - n.y * (T / 2 + 8) };
+    const inB = { x: p1.x - n.x * (T / 2 + 8), y: p1.y - n.y * (T / 2 + 8) };
+    drawRoomDim(targetCtx, inA.x, inA.y, inB.x, inB.y, formatLength(fx.offsetCm), color, 6);
+    // width across the opening
+    const wx = -uy;
+    const wy = ux;
+    drawRoomDim(
+      targetCtx,
+      p1.x + wx * 7,
+      p1.y + wy * 7,
+      p2.x + wx * 7,
+      p2.y + wy * 7,
+      formatLength(fx.widthCm),
+      color,
+      5,
+    );
+  });
+  targetCtx.restore();
+}
+
+// Minimal linear dimension with halo label (world px space)
+function drawRoomDim(targetCtx, x1, y1, x2, y2, label, color, fontSize) {
+  targetCtx.save();
+  targetCtx.strokeStyle = color;
+  targetCtx.fillStyle = color;
+  targetCtx.lineWidth = 1;
+  targetCtx.beginPath();
+  targetCtx.moveTo(x1, y1);
+  targetCtx.lineTo(x2, y2);
+  targetCtx.stroke();
+  const mx = (x1 + x2) / 2;
+  const my = (y1 + y2) / 2;
+  const fs = fontSize || 11;
+  targetCtx.font = `bold ${fs}px sans-serif`;
+  targetCtx.textAlign = "center";
+  targetCtx.textBaseline = "middle";
+  const tw = targetCtx.measureText(label).width;
+  targetCtx.fillStyle = "rgba(255,255,255,0.9)";
+  targetCtx.fillRect(mx - tw / 2 - 3, my - fs / 2 - 2, tw + 6, fs + 4);
+  targetCtx.fillStyle = color;
+  targetCtx.fillText(label, mx, my);
+  targetCtx.restore();
+}
+
+function fitRoomView() {
+  if (!state.rooms.length && !state.floorPlanImage) return;
+  const wrapper = document.getElementById("canvasWrapper");
+  const ww = wrapper.clientWidth;
+  const wh = wrapper.clientHeight;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  if (state.floorPlanImage) {
+    minX = 0; minY = 0; maxX = state.floorPlanImage.width; maxY = state.floorPlanImage.height;
+  }
+  state.rooms.forEach((r) => {
+    const x0 = cmToPixels(r.x), y0 = cmToPixels(r.y);
+    const x1 = cmToPixels(r.x + r.widthCm), y1 = cmToPixels(r.y + r.depthCm);
+    minX = Math.min(minX, x0); minY = Math.min(minY, y0);
+    maxX = Math.max(maxX, x1); maxY = Math.max(maxY, y1);
+  });
+  const bw = maxX - minX, bh = maxY - minY;
+  if (bw <= 0 || bh <= 0) return;
+  state.zoom = Math.min((ww * 0.9) / bw, (wh * 0.9) / bh, 2);
+  state.zoom = Math.max(state.zoom, 0.02);
+  state.pan.x = (ww - bw * state.zoom) / 2 - minX * state.zoom;
+  state.pan.y = (wh - bh * state.zoom) / 2 - minY * state.zoom;
+  document.getElementById("zoomLevel").textContent = Math.round(state.zoom * 100) + "%";
   render();
 }
 
-function renderObstacleList() {
-  const list = document.getElementById("obstacleList");
+// --- Panel rendering ---
+
+function renderRoomPanel() {
+  const panel = document.getElementById("roomPanel");
+  if (!panel) return;
+  updateSidebarPanels();
+
+  const wt = document.getElementById("wallThickness");
+  if (wt) wt.value = Math.round(state.wallThicknessCm * 10) / 10;
+
+  renderRoomList();
+  renderRoomDetail();
+}
+
+function renderRoomList() {
+  const list = document.getElementById("roomList");
   if (!list) return;
-  if (!state.obstacles.length) {
-    list.innerHTML = "";
+  if (!state.rooms.length) {
+    list.innerHTML = `<div class="room-empty">${t("room.noRooms")}</div>`;
     return;
   }
-  const ppm = state.pixelsPerMeter || DEFAULT_MEASURE_SCALE;
-  list.innerHTML = state.obstacles
-    .map((ob, i) => {
-      const tp = getObstacleType(ob.type) || getObstacleType(DEFAULT_OBSTACLE_TYPE);
-      const selected = state.selectedObstacle === ob ? " selected" : "";
-      const wCm = Math.round(ob.widthPx / (ppm / 100));
-      const hCm = Math.round(ob.heightPx / (ppm / 100));
+  list.innerHTML = state.rooms
+    .map((r, i) => {
+      const selected = r.id === state.selectedRoomId ? " selected" : "";
       return `
-      <div class="obstacle-item${selected}" data-obsid="${ob.id}" role="listitem">
-        <div class="obstacle-item-head">
-          <span class="measure-swatch" style="background:${tp.color}"></span>
-          <span class="measure-code">${tp.code}</span>
-          <span class="obstacle-item-name">${i + 1}. ${escapeHtml(ob.name || t("measure." + ob.type))}</span>
-          <button class="obstacle-del-btn" data-id="${ob.id}" aria-label="${t("measure.delete")}">🗑</button>
+      <div class="room-card${selected}" data-roomid="${r.id}" role="listitem">
+        <div class="room-card-head">
+          <span class="room-card-name">${t("room.cardName", { n: i + 1 })}</span>
+          <button class="obstacle-del-btn" data-delroom="${r.id}" aria-label="${t("room.delete")}">🗑</button>
         </div>
-        <div class="obstacle-item-controls">
-          <label>${t("measure.obstacleWidth")}</label>
-          <input type="number" step="1" min="1" value="${wCm}" data-obsf="width" data-id="${ob.id}" aria-label="${t("measure.obstacleWidth")}" />
-          <label>${t("measure.obstacleDepth")}</label>
-          <input type="number" step="1" min="1" value="${hCm}" data-obsf="depth" data-id="${ob.id}" aria-label="${t("measure.obstacleDepth")}" />
-        </div>
-        <div class="obstacle-item-name-field">
-          <span>${t("measure.obstacleName")}</span>
-          <input type="text" value="${escapeHtml(ob.name || "")}" data-obsf="name" data-id="${ob.id}" aria-label="${t("measure.obstacleName")}" />
+        <div class="room-card-inputs">
+          <label>${t("room.width")} <input type="number" step="1" min="1" value="${Math.round(r.widthCm)}" data-roomfield="width" data-id="${r.id}" /></label>
+          <label>${t("room.depth")} <input type="number" step="1" min="1" value="${Math.round(r.depthCm)}" data-roomfield="depth" data-id="${r.id}" /></label>
+          <label>${t("room.ceiling")} <input type="number" step="1" min="1" value="${r.ceilingHeightCm || 260}" data-roomfield="ceiling" data-id="${r.id}" /></label>
         </div>
       </div>`;
     })
     .join("");
 
-  list.querySelectorAll(".obstacle-item").forEach((row) => {
-    const id = row.getAttribute("data-obsid");
-    row.addEventListener("click", (ev) => {
+  list.querySelectorAll(".room-card").forEach((card) => {
+    const id = card.getAttribute("data-roomid");
+    card.addEventListener("click", (ev) => {
       if (ev.target.closest("input") || ev.target.closest("button")) return;
-      const ob = state.obstacles.find((o) => o.id === id);
-      if (!ob) return;
-      state.selectedObstacle = ob;
-      state.selectedMeasurement = null;
-      renderMeasurePanel();
+      selectRoom(id);
+    });
+  });
+  list.querySelectorAll("[data-delroom]").forEach((btn) => {
+    btn.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      deleteRoom(btn.getAttribute("data-delroom"));
+    });
+  });
+  list.querySelectorAll("[data-roomfield]").forEach((inp) => {
+    inp.addEventListener("change", () => {
+      updateRoomField(inp.getAttribute("data-id"), inp.getAttribute("data-roomfield"), inp.value);
+    });
+  });
+}
+
+function renderRoomDetail() {
+  const detail = document.getElementById("roomDetail");
+  if (!detail) return;
+  const r = getRoom(state.selectedRoomId);
+  if (!r) {
+    detail.innerHTML = "";
+    return;
+  }
+
+  const wallHtml = ROOM_WALL_TYPES.map(
+    (w) => `<button type="button" class="room-wall-btn${w === state.selectedWall ? " active" : ""}" data-wall="${w}">${t("room.wall" + {
+      top: "Top", right: "Right", bottom: "Bottom", left: "Left",
+    }[w])}</button>`,
+  ).join("");
+
+  const addHtml = `
+    <button type="button" class="room-add-btn" data-addfx="door" style="--fcolor:${ROOM_COLORS.door}">🚪 ${t("room.addDoor")}</button>
+    <button type="button" class="room-add-btn" data-addfx="window" style="--fcolor:${ROOM_COLORS.window}">🪟 ${t("room.addWindow")}</button>
+    <button type="button" class="room-add-btn" data-addfx="heater" style="--fcolor:${ROOM_COLORS.heater}">♨ ${t("room.addHeater")}</button>
+  `;
+
+  const cornerHtml = ROOM_CORNERS.map(
+    (c) => `<button type="button" class="room-corner-btn" data-corner="${c}">${t("room.corner" + { tl: "Tl", tr: "Tr", br: "Br", bl: "Bl" }[c])}</button>`,
+  ).join("");
+
+  detail.innerHTML = `
+    <div class="room-detail-block">
+      <div class="room-detail-title">${t("room.selectedRooms")}</div>
+      <div class="room-wall-picker">${wallHtml}</div>
+      <div class="room-fixture-adds">${addHtml}</div>
+      <div class="room-fixture-adds room-corner-row">
+        <span class="room-corner-label">${t("room.chimneyAt")}</span>
+        ${cornerHtml}
+      </div>
+    </div>
+    <div id="roomFixtureList" class="room-fixture-list"></div>
+    <div class="room-hint">${t("room.snapHint")}</div>
+  `;
+
+  detail.querySelectorAll(".room-wall-btn").forEach((b) => {
+    b.addEventListener("click", () => {
+      state.selectedWall = b.getAttribute("data-wall");
+      renderRoomPanel();
+    });
+  });
+  detail.querySelectorAll("[data-addfx]").forEach((b) => {
+    b.addEventListener("click", () => {
+      if (!state.selectedWall) return;
+      addFixture(r.id, state.selectedWall, b.getAttribute("data-addfx"));
+    });
+  });
+  detail.querySelectorAll("[data-corner]").forEach((b) => {
+    b.addEventListener("click", () => {
+      addFixture(r.id, b.getAttribute("data-corner"), "chimney");
+    });
+  });
+
+  renderFixtureList();
+}
+
+function renderFixtureList() {
+  const list = document.getElementById("roomFixtureList");
+  if (!list) return;
+  const r = getRoom(state.selectedRoomId);
+  if (!r || !list) return;
+  if (!r.fixtures.length) {
+    list.innerHTML = `<div class="room-empty">${t("room.noFixtures")}</div>`;
+    return;
+  }
+  const wallLen = state.selectedWall ? roomWallLength(r, state.selectedWall) : 0;
+  list.innerHTML = r.fixtures
+    .map((fx) => {
+      const selected = fx.id === state.selectedFixtureId ? " selected" : "";
+      const color = ROOM_COLORS[fx.type] || "#7f8c8d";
+      const name = t("room.fixture" + { door: "Door", window: "Window", heater: "Heater", chimney: "Chimney" }[fx.type]);
+      const controls = [];
+      if (fx.type === "chimney") {
+        controls.push(`<label>${t("room.width")} <input type="number" step="1" min="1" value="${Math.round(fx.widthCm)}" data-fixturefield="width" data-id="${fx.id}" /></label>`);
+        controls.push(`<label>${t("room.depth")} <input type="number" step="1" min="1" value="${Math.round(fx.depthCm)}" data-fixturefield="depth" data-id="${fx.id}" /></label>`);
+      } else {
+        controls.push(`<label>${t("room.offset")} <input type="number" step="1" min="0" max="${wallLen}" value="${Math.round(fx.offsetCm)}" data-fixturefield="offset" data-id="${fx.id}" /></label>`);
+        controls.push(`<label>${t("room.width")} <input type="number" step="1" min="1" max="${wallLen}" value="${Math.round(fx.widthCm)}" data-fixturefield="width" data-id="${fx.id}" /></label>`);
+        if (fx.type === "heater") {
+          controls.push(`<label>${t("room.depth")} <input type="number" step="1" min="1" value="${Math.round(fx.depthCm)}" data-fixturefield="depth" data-id="${fx.id}" /></label>`);
+        }
+        if (fx.type === "window" && fx.boardDepthCm != null) {
+          controls.push(`<label>${t("room.board")} <input type="number" step="1" min="0" value="${Math.round(fx.boardDepthCm)}" data-fixturefield="board" data-id="${fx.id}" /></label>`);
+        }
+      }
+      const wallTag = fx.wall === "corner" ? t("room.corner" + { tl: "Tl", tr: "Tr", br: "Br", bl: "Bl" }[fx.corner]) : t("room.wall" + { top: "Top", right: "Right", bottom: "Bottom", left: "Left" }[fx.wall]);
+      return `
+      <div class="room-fixture-item${selected}" data-fixtureid="${fx.id}">
+        <div class="room-fixture-head">
+          <span class="measure-swatch" style="background:${color}"></span>
+          <span class="obstacle-item-name">${name} · ${wallTag}</span>
+          <button class="obstacle-del-btn" data-delfixture="${fx.id}" aria-label="${t("room.delete")}">🗑</button>
+        </div>
+        <div class="room-fixture-controls">${controls.join("")}</div>
+      </div>`;
+    })
+    .join("");
+
+  list.querySelectorAll(".room-fixture-item").forEach((item) => {
+    item.addEventListener("click", (ev) => {
+      if (ev.target.closest("input") || ev.target.closest("button")) return;
+      state.selectedFixtureId = item.getAttribute("data-fixtureid");
+      renderRoomPanel();
       render();
     });
   });
-  list.querySelectorAll(".obstacle-del-btn").forEach((btn) => {
+  list.querySelectorAll("[data-delfixture]").forEach((btn) => {
     btn.addEventListener("click", (ev) => {
       ev.stopPropagation();
-      deleteObstacle(btn.getAttribute("data-id"));
+      deleteFixture(r.id, btn.getAttribute("data-delfixture"));
     });
   });
-  list.querySelectorAll("input[data-obsf]").forEach((inp) => {
+  list.querySelectorAll("[data-fixturefield]").forEach((inp) => {
     inp.addEventListener("change", () => {
-      updateObstacleField(
-        inp.getAttribute("data-id"),
-        inp.getAttribute("data-obsf"),
-        inp.value,
-      );
+      updateFixtureField(r.id, inp.getAttribute("data-id"), inp.getAttribute("data-fixturefield"), inp.value);
     });
   });
 }
 
-// Draw all fixed installations on the given context (world-space, unrotated)
-function drawObstaclesLayer(targetCtx) {
-  state.obstacles.forEach((ob) => drawObstacle(ob, targetCtx, 1, 0, 0));
-  if (state.measureMode && state.addObstacleMode && state.obstacleDraftStart) {
-    const end = state.obstacleDraftEnd || state.obstacleDraftStart;
-    drawObstacleDraft(targetCtx, state.obstacleDraftStart, end);
-  }
-}
-
-function drawObstacle(ob, targetCtx, s, ox, oy) {
-  const tp = getObstacleType(ob.type) || getObstacleType(DEFAULT_OBSTACLE_TYPE);
-  const selected = state.selectedObstacle === ob;
-  const x = ob.x * s + ox;
-  const y = ob.y * s + oy;
-  const w = ob.widthPx * s;
-  const h = ob.heightPx * s;
-  const left = x - w / 2;
-  const top = y - h / 2;
-  const lineColor = selected ? "#FF1493" : tp.color;
-  const ppm = state.pixelsPerMeter || DEFAULT_MEASURE_SCALE;
-  const wCm = Math.round(ob.widthPx / (ppm / 100));
-  const hCm = Math.round(ob.heightPx / (ppm / 100));
-  const label = ob.name || t("measure." + ob.type);
-
-  targetCtx.save();
-
-  // translucent fill
-  targetCtx.fillStyle = lineColor;
-  targetCtx.globalAlpha = 0.25;
-  targetCtx.fillRect(left, top, w, h);
-  targetCtx.globalAlpha = 1;
-
-  // diagonal hatch to signal "occupies space"
-  targetCtx.strokeStyle = lineColor;
-  targetCtx.globalAlpha = 0.7;
-  targetCtx.lineWidth = 1 * s;
-  const step = Math.max(9 * s, 6);
-  for (let lx = left - h; lx < left + w + step; lx += step) {
-    targetCtx.beginPath();
-    targetCtx.moveTo(lx, top + h);
-    targetCtx.lineTo(lx + h, top);
-    targetCtx.stroke();
-  }
-  targetCtx.globalAlpha = 1;
-
-  // border
-  targetCtx.lineWidth = (selected ? 2.5 : 1.8) * s;
-  targetCtx.strokeRect(left, top, w, h);
-
-  // corner markers when selected
-  if (selected) {
-    targetCtx.fillStyle = "#FF1493";
-    const cs = 5 * s;
-    [
-      [left, top],
-      [left + w, top],
-      [left, top + h],
-      [left + w, top + h],
-    ].forEach(([cx, cy]) =>
-      targetCtx.fillRect(cx - cs / 2, cy - cs / 2, cs, cs),
-    );
-  }
-
-  // centered name label
-  targetCtx.textAlign = "center";
-  targetCtx.textBaseline = "middle";
-  targetCtx.font = `bold ${Math.max(10, 12 * s)}px sans-serif`;
-  const tw = targetCtx.measureText(label).width;
-  const cy = top + h / 2;
-  targetCtx.fillStyle = "rgba(255,255,255,0.9)";
-  targetCtx.fillRect(x - tw / 2 - 3 * s, cy - 8 * s, tw + 6 * s, 16 * s);
-  targetCtx.fillStyle = "#2c3e50";
-  targetCtx.fillText(label, x, cy);
-
-  // width dimension above the obstacle
-  const wText = wCm + " cm";
-  targetCtx.font = `bold ${Math.max(10, 11 * s)}px sans-serif`;
-  const wt = targetCtx.measureText(wText).width;
-  targetCtx.fillStyle = "rgba(255,255,255,0.9)";
-  targetCtx.fillRect(x - wt / 2 - 2 * s, top - 12 * s, wt + 4 * s, 13 * s);
-  targetCtx.fillStyle = "#2c3e50";
-  targetCtx.fillText(wText, x, top - 5 * s);
-
-  // depth dimension on the right side (rotated)
-  const hText = hCm + " cm";
-  targetCtx.save();
-  targetCtx.translate(left + w + 11 * s, cy);
-  targetCtx.rotate(Math.PI / 2);
-  const ht = targetCtx.measureText(hText).width;
-  targetCtx.fillStyle = "rgba(255,255,255,0.9)";
-  targetCtx.fillRect(-ht / 2 - 2 * s, -6.5 * s, ht + 4 * s, 13 * s);
-  targetCtx.fillStyle = "#2c3e50";
-  targetCtx.fillText(hText, 0, 0);
-  targetCtx.restore();
-
-  targetCtx.restore();
-}
-
-// Live ghost while dragging the second corner of an obstacle
-function drawObstacleDraft(targetCtx, a, b) {
-  const tp =
-    getObstacleType(state.obstacleActiveType) || getObstacleType(DEFAULT_OBSTACLE_TYPE);
-  const left = Math.min(a.x, b.x);
-  const top = Math.min(a.y, b.y);
-  const w = Math.abs(b.x - a.x);
-  const h = Math.abs(b.y - a.y);
-  const ppm = state.pixelsPerMeter || DEFAULT_MEASURE_SCALE;
-  const wCm = Math.round(w / (ppm / 100));
-  const hCm = Math.round(h / (ppm / 100));
-
-  targetCtx.save();
-  targetCtx.setLineDash([6, 4]);
-  targetCtx.strokeStyle = tp.color;
-  targetCtx.lineWidth = 1.8;
-  targetCtx.strokeRect(left, top, w, h);
-  targetCtx.setLineDash([]);
-
-  // first corner marker + live size label
-  targetCtx.fillStyle = tp.color;
-  targetCtx.beginPath();
-  targetCtx.arc(a.x, a.y, 4, 0, Math.PI * 2);
-  targetCtx.fill();
-
-  const label = `${tp.code} ${wCm} × ${hCm} cm`;
-  targetCtx.font = "bold 13px sans-serif";
-  targetCtx.textAlign = "center";
-  targetCtx.textBaseline = "middle";
-  const midX = left + w / 2;
-  const labelY = top - 14;
-  const tw = targetCtx.measureText(label).width;
-  targetCtx.fillStyle = "rgba(255,255,255,0.9)";
-  targetCtx.fillRect(midX - tw / 2 - 4, labelY - 9, tw + 8, 18);
-  targetCtx.fillStyle = tp.color;
-  targetCtx.fillText(label, midX, labelY);
-  targetCtx.restore();
-}
-
-// Export the floor plan + measurements + legend as a PNG image
+// Export the floor plan + rooms as a PNG image
 function exportMeasurementImage() {
   const hasPlan = !!state.floorPlanImage;
-  if (
-    !hasPlan &&
-    state.measurements.length === 0 &&
-    state.obstacles.length === 0
-  ) {
-    alert(t("measure.noDataToExport"));
+  if (!hasPlan && state.rooms.length === 0) {
+    alert(t("room.noDataToExport"));
     return;
   }
 
@@ -2298,18 +2350,15 @@ function exportMeasurementImage() {
   let by1 = Infinity;
   let bx2 = -Infinity;
   let by2 = -Infinity;
-  state.measurements.forEach((m) => {
-    bx1 = Math.min(bx1, m.x1);
-    by1 = Math.min(by1, m.y1);
-    bx2 = Math.max(bx2, m.x2);
-    by2 = Math.max(by2, m.y2);
-  });
-  state.obstacles.forEach((ob) => {
-    bx1 = Math.min(bx1, ob.x - ob.widthPx / 2);
-    by1 = Math.min(by1, ob.y - ob.heightPx / 2);
-    bx2 = Math.max(bx2, ob.x + ob.widthPx / 2);
-    by2 = Math.max(by2, ob.y + ob.heightPx / 2);
-  });
+  if (state.rooms.length) {
+    const ex = (state.pixelsPerMeter || DEFAULT_MEASURE_SCALE) / 100;
+    state.rooms.forEach((r) => {
+      bx1 = Math.min(bx1, r.x * ex);
+      by1 = Math.min(by1, r.y * ex);
+      bx2 = Math.max(bx2, (r.x + r.widthCm) * ex);
+      by2 = Math.max(by2, (r.y + r.depthCm) * ex);
+    });
+  }
   if (hasPlan) {
     bx1 = Math.min(bx1, 0);
     by1 = Math.min(by1, 0);
@@ -2323,18 +2372,8 @@ function exportMeasurementImage() {
   const bh = by2 - by1;
   const scale = Math.min(1, 3800 / Math.max(bw, bh, 1));
 
-  // Legend band
-  const legendRowH = 22;
-  const obstacleRows = OBSTACLE_TYPES.length;
-  const legendH =
-    24 +
-    legendRowH * MEASUREMENT_TYPES.length +
-    18 +
-    legendRowH * obstacleRows +
-    12;
-
   const W = Math.max(2, Math.ceil((bw + pad * 2) * scale));
-  const H = Math.max(2, Math.ceil((bh + pad * 2) * scale) + Math.ceil(legendH));
+  const H = Math.max(2, Math.ceil((bh + pad * 2) * scale) + 32);
 
   const exportCanvas = document.createElement("canvas");
   exportCanvas.width = W;
@@ -2361,8 +2400,7 @@ function exportMeasurementImage() {
   } else {
     octx.drawImage(state.floorPlanImage, 0, 0);
   }
-  state.obstacles.forEach((ob) => drawObstacle(ob, octx, 1, 0, 0));
-  state.measurements.forEach((m) => drawMeasurement(m, octx, 1, 0, 0));
+  drawRoomsLayer(octx, true);
   octx.restore();
 
   // Caption bar with project and scale info
@@ -2372,52 +2410,10 @@ function exportMeasurementImage() {
   octx.textAlign = "left";
   octx.textBaseline = "alphabetic";
   octx.fillText(
-    `${state.projectName}  ·  ${Math.round(ppm)} px/m  ·  ${t("measure.legendUnit")}`,
+    `${state.projectName}  ·  ${Math.round(ppm)} px/m`,
     12,
     18,
   );
-
-  // Legend band at the bottom
-  const ly = H - legendH;
-  octx.fillStyle = "rgba(236, 240, 241, 0.92)";
-  octx.fillRect(0, ly, W, legendH);
-  octx.strokeStyle = "#bdc3c7";
-  octx.strokeRect(0.5, ly + 0.5, W - 1, legendH - 1);
-
-  octx.fillStyle = "#2c3e50";
-  octx.font = "bold 13px sans-serif";
-  octx.fillText(
-    `${t("measure.legendTitle")}  —  ${t("measure.legendUnit")}`,
-    12,
-    ly + 16,
-  );
-
-  MEASUREMENT_TYPES.forEach((tp, i) => {
-    const yy = ly + 30 + i * legendRowH + 8;
-    octx.fillStyle = tp.color;
-    octx.fillRect(14, yy - 9, 12, 12);
-    octx.fillStyle = "#2c3e50";
-    octx.font = "12px sans-serif";
-    octx.fillText(`${tp.code}  =  ${t("measure." + tp.id)}`, 34, yy);
-  });
-
-  // Separator + fixed-installation legend entries
-  const obsTitleY = ly + 30 + MEASUREMENT_TYPES.length * legendRowH + 2;
-  octx.fillStyle = "#7f8c8d";
-  octx.font = "bold 11px sans-serif";
-  octx.fillText(t("measure.obstacleTitle"), 12, obsTitleY + 4);
-  OBSTACLE_TYPES.forEach((tp, i) => {
-    const yy =
-      ly + 30 + (MEASUREMENT_TYPES.length + 1) * legendRowH + i * legendRowH + 8;
-    octx.fillStyle = tp.color;
-    octx.fillRect(14, yy - 9, 12, 12);
-    octx.strokeStyle = "rgba(44,62,80,0.4)";
-    octx.lineWidth = 1;
-    octx.strokeRect(14, yy - 9, 12, 12);
-    octx.fillStyle = "#2c3e50";
-    octx.font = "12px sans-serif";
-    octx.fillText(`${tp.code}  =  ${t("measure." + tp.id)}`, 34, yy);
-  });
 
   const dateStr = new Date().toLocaleString(getCurrentLocale(), {
     year: "numeric",
@@ -2757,7 +2753,7 @@ function render() {
   } else {
     ctx.fillStyle = "#f0f0f0";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    if (state.measureMode) {
+    if (state.roomEditorMode) {
       // Show a construction grid for from-scratch Grundrisse
       drawMeasureGrid(ctx, {
         s: 1,
@@ -2776,18 +2772,13 @@ function render() {
     }
   }
 
-  // Draw furniture (hidden while the measurement tool is active)
-  if (!state.measureMode) {
-    state.furniture.forEach((furniture) => {
-      drawFurniture(furniture);
-    });
-  }
+  // Draw the parametric rooms (floor plan created from dimensions)
+  drawRoomsLayer(ctx, state.roomEditorMode);
 
-  // Draw fixed installations (heaters, built-ins, …)
-  drawObstaclesLayer(ctx);
-
-  // Draw measurements
-  drawMeasurementsLayer(ctx);
+  // Draw furniture
+  state.furniture.forEach((furniture) => {
+    drawFurniture(furniture);
+  });
 
   // Draw calibration line
   if (state.calibrationMode) {
@@ -3112,74 +3103,36 @@ function screenToCanvas(screenX, screenY) {
 function handleCanvasMouseDown(e) {
   const { x, y } = screenToCanvas(e.clientX, e.clientY);
 
-  // Handle measurement mode
-  if (state.measureMode) {
-    // Middle mouse or Shift-click pans in measure mode
+  // Handle room editor mode
+  if (state.roomEditorMode) {
+    // Middle mouse or Shift-click drag pans
     if (e.button === 1 || e.shiftKey) {
       state.isPanning = true;
       state.panStart = { x: e.clientX - state.pan.x, y: e.clientY - state.pan.y };
       return;
     }
 
-    // Placing a fixed installation: two diagonal corners
-    if (state.addObstacleMode) {
-      if (!state.obstacleDraftStart) {
-        state.obstacleDraftStart = { x, y };
-        state.obstacleDraftEnd = null;
-        state.selectedObstacle = null;
-      } else {
-        addObstacle(
-          state.obstacleActiveType,
-          state.obstacleDraftStart.x,
-          state.obstacleDraftStart.y,
-          x,
-          y,
-        );
-      }
-      renderMeasurePanel();
-      render();
-      return;
-    }
-
-    // Click an existing obstacle to select it
-    const hitOb = hitTestObstacle(x, y);
-    if (hitOb) {
-      state.selectedObstacle = hitOb;
-      state.selectedMeasurement = null;
-      renderMeasurePanel();
-      render();
-      return;
-    }
-
-    // Click an existing measurement to select it
-    const hit = hitTestMeasurement(x, y);
+    const hit = hitTestRooms(x, y);
     if (hit) {
-      state.selectedMeasurement = hit;
-      state.selectedObstacle = null;
-      renderMeasureList();
+      const r = hit.room;
+      state.selectedRoomId = r.id;
+      state.selectedWall = hit.wall || state.selectedWall || "top";
+      state.selectedFixtureId = null;
+      canvas.style.cursor = "grabbing";
+      const pxScale = roomPxScale();
+      startRoomDrag(r, {
+        dx: x / pxScale - r.x,
+        dy: y / pxScale - r.y,
+      });
+      renderRoomPanel();
       render();
-      return;
-    }
-
-    // Otherwise place a measurement point
-    if (!state.measureDraftStart) {
-      state.measureDraftStart = { x, y };
-      state.measureDraftEnd = null;
-      state.selectedMeasurement = null;
-      state.selectedObstacle = null;
     } else {
-      addMeasurement(
-        state.measureActiveType,
-        state.measureDraftStart.x,
-        state.measureDraftStart.y,
-        x,
-        y,
-      );
-      state.measureDraftStart = null;
-      state.measureDraftEnd = null;
+      state.selectedRoomId = null;
+      state.selectedWall = null;
+      state.selectedFixtureId = null;
+      renderRoomPanel();
+      render();
     }
-    renderMeasureList();
-    render();
     return;
   }
 
@@ -3300,19 +3253,10 @@ function handleCanvasMouseMove(e) {
     return;
   }
 
-  if (state.measureMode && state.addObstacleMode && state.obstacleDraftStart) {
-    // Live preview of the rectangle while placing a fixed installation
+  if (state.roomEditorMode && state.draggingRoomId) {
+    // Move the room with wall-thickness + door snapping
     const { x, y } = screenToCanvas(e.clientX, e.clientY);
-    state.obstacleDraftEnd = { x, y };
-    render();
-    return;
-  }
-
-  if (state.measureMode && state.measureDraftStart) {
-    // Live preview while placing a measurement
-    const { x, y } = screenToCanvas(e.clientX, e.clientY);
-    state.measureDraftEnd = { x, y };
-    render();
+    moveRoomDragTo({ x, y });
     return;
   }
 
@@ -3365,6 +3309,10 @@ function handleCanvasMouseUp() {
     state.isRotating = false;
     markChanges();
     saveProject();
+  }
+  if (state.draggingRoomId) {
+    endRoomDrag();
+    renderRoomPanel();
   }
 }
 
@@ -3501,24 +3449,25 @@ function handleKeyDown(e) {
     return;
   }
 
-  // Delete key removes the selected measurement, obstacle or furniture
+  // Delete key removes the selected room, room fixture or furniture
   if (e.key === "Delete" || e.key === "Del") {
-    if (state.measureMode && state.selectedObstacle) {
-      deleteObstacle(state.selectedObstacle.id);
-    } else if (state.measureMode && state.selectedMeasurement) {
-      deleteMeasurement(state.selectedMeasurement.id);
+    if (state.roomEditorMode && state.selectedFixtureId) {
+      const r = state.rooms.find((rm) =>
+        rm.fixtures.some((f) => f.id === state.selectedFixtureId),
+      );
+      if (r) deleteFixture(r.id, state.selectedFixtureId);
+    } else if (state.roomEditorMode && state.selectedRoomId) {
+      deleteRoom(state.selectedRoomId);
     } else if (state.selectedFurniture) {
       deleteFurniture();
     }
     return;
   }
 
-  // Escape cancels a draft (measurement or fixed installation)
+  // Escape exits the room editor
   if (e.key === "Escape") {
-    if (state.measureMode && state.addObstacleMode && state.obstacleDraftStart) {
-      cancelObstacleDraft();
-    } else if (state.measureMode && state.measureDraftStart) {
-      cancelMeasureDraft();
+    if (state.roomEditorMode) {
+      exitRoomEditorMode();
     }
   }
 }
@@ -3530,8 +3479,8 @@ function saveProject() {
     floorPlan: state.floorPlan,
     pixelsPerMeter: state.pixelsPerMeter,
     furniture: state.furniture,
-    measurements: state.measurements,
-    obstacles: state.obstacles,
+    rooms: state.rooms,
+    wallThicknessCm: state.wallThicknessCm,
     snapshotGraph: state.snapshotGraph,
     currentSnapshotId: state.currentSnapshotId,
     lastModified: new Date().toISOString(),
@@ -3606,16 +3555,16 @@ function loadProject() {
 
     state.pixelsPerMeter = project.pixelsPerMeter || null;
     state.furniture = project.furniture || [];
-    state.measurements = project.measurements || [];
-    state.obstacles = project.obstacles || [];
+    state.rooms = project.rooms || [];
+    state.wallThicknessCm = project.wallThicknessCm || DEFAULT_WALL_THICKNESS_CM;
     // Handle both old and new snapshot formats
     state.snapshotGraph = project.snapshotGraph || [];
     state.currentSnapshotId = project.currentSnapshotId || null;
     state.hasUnsavedChanges = false;
-    state.addObstacleMode = false;
-    state.obstacleDraftStart = null;
-    state.obstacleDraftEnd = null;
-    state.selectedObstacle = null;
+    state.roomEditorMode = false;
+    state.selectedRoomId = null;
+    state.selectedWall = null;
+    state.selectedFixtureId = null;
     updateSnapshotUI();
     renderSnapshotGraph();
   } catch (e) {
@@ -3637,16 +3586,16 @@ function loadProjectByName(projectName) {
   updateProjectNameDisplay();
   state.pixelsPerMeter = project.pixelsPerMeter || null;
   state.furniture = project.furniture || [];
-  state.measurements = project.measurements || [];
-  state.obstacles = project.obstacles || [];
+  state.rooms = project.rooms || [];
+  state.wallThicknessCm = project.wallThicknessCm || DEFAULT_WALL_THICKNESS_CM;
   // Handle both old and new snapshot formats
   state.snapshotGraph = project.snapshotGraph || [];
   state.currentSnapshotId = project.currentSnapshotId || null;
   state.hasUnsavedChanges = false;
-  state.addObstacleMode = false;
-  state.obstacleDraftStart = null;
-  state.obstacleDraftEnd = null;
-  state.selectedObstacle = null;
+  state.roomEditorMode = false;
+  state.selectedRoomId = null;
+  state.selectedWall = null;
+  state.selectedFixtureId = null;
   updateSnapshotUI();
   renderSnapshotGraph();
 
@@ -3677,18 +3626,17 @@ function closeProject() {
   state.selectedFurniture = null;
   state.pixelsPerMeter = null;
   state.projectName = "Untitled Project";
-  state.measurements = [];
-  state.measureMode = false;
-  state.measureDraftStart = null;
-  state.measureDraftEnd = null;
-  state.selectedMeasurement = null;
-  state.obstacles = [];
-  state.addObstacleMode = false;
-  state.obstacleDraftStart = null;
-  state.obstacleDraftEnd = null;
-  state.selectedObstacle = null;
-  document.getElementById("measureBtn").classList.remove("active");
-  document.getElementById("measureBtn").setAttribute("aria-pressed", "false");
+  state.rooms = [];
+  state.wallThicknessCm = DEFAULT_WALL_THICKNESS_CM;
+  state.roomEditorMode = false;
+  state.selectedRoomId = null;
+  state.selectedWall = null;
+  state.selectedFixtureId = null;
+  const roomBtn = document.getElementById("roomBtn");
+  if (roomBtn) {
+    roomBtn.classList.remove("active");
+    roomBtn.setAttribute("aria-pressed", "false");
+  }
   canvas.style.cursor = "grab";
   localStorage.removeItem("roomer-current-project");
   showUploadOverlay();
@@ -3723,14 +3671,15 @@ function renameProject() {
 }
 
 // Export project as JSON file
+// Export project to JSON file
 function exportProject() {
   const project = {
     name: state.projectName,
     floorPlan: state.floorPlan,
     pixelsPerMeter: state.pixelsPerMeter,
     furniture: state.furniture,
-    measurements: state.measurements,
-    obstacles: state.obstacles,
+    rooms: state.rooms,
+    wallThicknessCm: state.wallThicknessCm,
     snapshotGraph: state.snapshotGraph,
     currentSnapshotId: state.currentSnapshotId,
     lastModified: new Date().toISOString(),

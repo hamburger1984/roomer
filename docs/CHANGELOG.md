@@ -1,5 +1,48 @@
 # Changelog
 
+## Version 1.12 - Remove Measurement Tool (September 2026)
+
+### Removed
+- **Measurement Tool (📐)** and **fixed installations** (heaters, appliances, built-ins, pipes):
+  - Freehand dimension lines and the typed measurement categories (W/D/DO/Win/WO/Ch/Col/H/X)
+  - Measurement list, sidebar scale field, "use as scale" recalibration and the obstacle draft tool
+  - Measurement/obstacle legend in PNG exports and the 📐 toolbar button
+  - All `measure.*`/obstacle translations and measurement/obstacle state, persistence, undo/redo,
+    crop offsets and input handling
+  - The upload-dialog button now reads **"Draw rooms from scratch (blank board)"** and opens the
+    room editor directly
+- Kept: the construction grid (shown in the room editor), the drawing scale, PNG export
+  (now floor plan + rooms only), and the room editor's door/window/heater/chimney fixtures
+
+### Fixed
+- Starting the room editor (or calibration) from the toolbar while the upload overlay was
+  visible no longer leaves the canvas hidden: entering a tool hides the upload overlay, so
+  rooms/plans are rendered immediately instead of behind the "create new project" screen
+
+## Version 1.11 - Parametric Room Editor (September 2026)
+
+### Added
+- **Room Editor (🏠)** - build the floor plan from actual rooms instead of freehand lines:
+  - Rooms are rectangles drawn to their **inside dimensions** (width, depth, ceiling)
+  - **Global wall thickness** in cm applies to all rooms (default 15 cm used for snapping)
+  - Rooms snap together with exactly one wall thickness between the interior faces
+  - **Door-to-door alignment**: rooms with facing doors snap so the doors line up
+  - Free drag with automatic snapping - no special ghost mode needed
+  - Fixtures attached to walls with numeric offset/width/depth fields:
+    - Doors (leaf + swing arc), windows (glass + window board), heaters (hatched), chimney corners
+  - Automatic dimensions: wall lengths drawn on the outside, opening offsets/widths on the inside
+  - Rooms persisted in projects (save/load/export/import), covered by undo/redo and crop offsets
+  - Blank board shows a construction grid while in the room editor
+- Undo/redo now also covers room and fixture operations
+
+### Changed
+- PNG export ("Export PNG") includes rooms and their dimensions
+
+### Next Steps
+- Irregular wall shapes and chunky corner geometry
+- Snapping preview (ghost outline) while dragging rooms
+- Furniture placement inside rooms
+
 ## Version 1.10 - Measurement Tool (Floor Plan Drawing) (September 2026)
 
 ### Added
@@ -24,6 +67,11 @@
 
 ### Changed
 - Undo/redo now also covers measurement operations
+
+### Fixed
+- The upload dialog is now dismissible: "Draw floor plan from measurements
+  (blank board)" starts a blank project and opens the measurement tool with the
+  construction grid, so from-scratch plans work in a fresh session
 
 ### Next Steps
 - OCR for image-based scale detection
