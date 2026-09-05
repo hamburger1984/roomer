@@ -25,6 +25,11 @@ An offline-first web application for arranging furniture on floor plans.
 - **Undo/Redo**: Undo and redo changes (Ctrl+Z / Ctrl+Y)
 - **Export/Import**: Export and import projects as .roomer.json files
 - **Crop**: Crop floor plan to desired area
+- **Measurement Tool (📐)**: Draw a scaled *floor plan* from real room measurements
+  - CAD-style dimension lines with typed categories (wall/room width, door, door opening offset, window, window offset, chimney, column, room height, other)
+  - Every measurement is printed in the image with its real length (cm)
+  - Scale is derived from the first known distance ("use as scale" per measurement)
+  - Export as PNG with an embedded legend explaining all measurement symbols
 - **Data Persistence**: Automatic saving in localStorage
 
 ## Installation
@@ -105,6 +110,28 @@ An offline-first web application for arranging furniture on floor plans.
 - **Zoom Buttons**: +/- buttons in the toolbar (bottom right, zoom to view center)
 - **Home Button (⌂)**: Fits view to show entire floor plan
 - **Automatic Fit**: When loading, the floor plan is automatically fitted
+
+### 6.1 Measurement Tool (📐) - Draw a floor plan from measurements
+
+Use this tool to record the real measurements of a room directly on an uploaded floor plan/photo, or to draw a scaled *floor plan* from scratch on the empty board (a construction grid is shown automatically).
+
+**Workflow:**
+1. Click the 📐 button in the toolbar to start the measurement tool.
+2. Set the **Scale** (pixels per meter) in the sidebar, or leave the default and correct it later.
+3. Pick a **type** for the next measurement:
+   - **W** Room width / wall length
+   - **D** Door width · **DO** Wall → door frame (opening offset)
+   - **Win** Window width · **WO** Wall → window (window offset)
+   - **Ch** Chimney (distance from wall) · **Col** Column/pillar · **H** Room height · **X** Other
+4. Click the first point, then the second point. The distance is shown live and the dimension line is added with its real length printed on the plan.
+5. To make the drawing match your *measured* values exactly: edit the length of a measurement in the sidebar and click **⚑ "Use as scale"** — this recalibrates the scale so the drawn distance equals the real one.
+6. Click **📷 Export PNG** to download the plan as an image that includes the printed measurements **and a legend** explaining every symbol.
+
+**Tips:**
+- Click an existing dimension line to select it; press `Delete` to remove it, or use 🗑 in the sidebar. `Esc` cancels a measurement in progress.
+- Middle-click or Shift-click drag pans the view while measuring.
+- Furniture is hidden while measuring so the plan stays clean.
+- All **W** measurements are also drawn as thick walls, so connecting room corners produces the room outline.
 
 ### 7. Snapshot System (Version Control)
 

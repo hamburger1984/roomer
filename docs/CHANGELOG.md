@@ -1,5 +1,34 @@
 # Changelog
 
+## Version 1.10 - Measurement Tool (Floor Plan Drawing) (September 2026)
+
+### Added
+- **Measurement Tool (📐)** - draw a scaled *floor plan* from real room measurements:
+  - CAD-style dimension lines between any two clicked points
+  - Typed measurement categories with distinct colors and short codes:
+    - W = room width / wall length (also drawn as thick walls for the room outline)
+    - D = door width, DO = wall → door frame (opening offset)
+    - Win = window width, WO = wall → window (window offset)
+    - Ch = chimney (distance from wall), Col = column/pillar, H = room height, X = other
+  - Real lengths printed on the image (cm)
+  - Live measurement preview while drawing
+  - Construction grid on the empty board for from-scratch plans
+  - **"Use as scale"** per measurement: recalibrates the drawing scale so a drawn
+    distance matches the real measured value
+  - Measurement list with selectable, editable and deletable entries (Delete key / 🗑)
+  - **PNG export** with embedded legend explaining all measurement symbols,
+    project name, scale and date
+  - Measurements persisted in projects (save/load/export/import) and included in crop offsets
+  - Full English/German localization
+  - Furniture is hidden while measuring for a clean plan
+
+### Changed
+- Undo/redo now also covers measurement operations
+
+### Next Steps
+- OCR for image-based scale detection
+- Visual scale bar recognition
+
 ## Version 1.9 - Internationalization (December 2025)
 
 ### Added

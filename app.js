@@ -9,6 +9,32 @@ const FURNITURE_CORNER_RADIUS = 1.5; // Border radius for furniture shapes
 const CROP_MIN_SIZE = 10; // Minimum crop area size in pixels
 const SELECTION_CORNER_SIZE = 8; // Size of selection corner markers
 
+// Measurement tool constants
+const MEASURE_DIM_OFFSET = 18; // Offset of dimension line from measured segment
+const MEASURE_EXT_LEN = 8; // Length of extension ticks
+const DEFAULT_MEASURE_SCALE = 100; // Default pixels per meter for from-scratch plans
+const MEASUREMENT_TYPES = [
+  { id: "wall", code: "W", color: "#2c3e50" },
+  { id: "door", code: "D", color: "#2980b9" },
+  { id: "doorOffset", code: "DO", color: "#16a085" },
+  { id: "window", code: "Win", color: "#f39c12" },
+  { id: "windowOffset", code: "WO", color: "#e67e22" },
+  { id: "chimney", code: "Ch", color: "#6c5ce7" },
+  { id: "column", code: "Col", color: "#a29bfe" },
+  { id: "height", code: "H", color: "#d63031" },
+  { id: "other", code: "X", color: "#7f8c8d" },
+];
+const DEFAULT_MEASURE_TYPE = "wall";
+
+// Rectangular fixed installations / obstructions (heaters, appliances, …)
+const OBSTACLE_TYPES = [
+  { id: "heater", code: "Heiz", color: "#e74c3c" },
+  { id: "appliance", code: "App", color: "#8e44ad" },
+  { id: "cabinet", code: "Cab", color: "#16a085" },
+  { id: "pipe", code: "Pipe", color: "#5d6d7e" },
+];
+const DEFAULT_OBSTACLE_TYPE = "heater";
+
 // Furniture library with default dimensions in cm
 const FURNITURE_LIBRARY = [
   // Seating
@@ -350,6 +376,20 @@ const state = {
   cropMode: false,
   cropStart: null,
   cropEnd: null,
+  // Measurement tool (Grundriss Maßzeichnung)
+  measureMode: false,
+  measurements: [],
+  measureActiveType: DEFAULT_MEASURE_TYPE,
+  measureDraftStart: null,
+  measureDraftEnd: null,
+  selectedMeasurement: null,
+  // Fixed installations / obstructions drawn on the plan
+  obstacles: [],
+  obstacleActiveType: DEFAULT_OBSTACLE_TYPE,
+  addObstacleMode: false,
+  obstacleDraftStart: null,
+  obstacleDraftEnd: null,
+  selectedObstacle: null,
 };
 
 // Canvas and context
@@ -655,8 +695,13 @@ function pushUndoState() {
   // Create a snapshot of the current furniture state
   const currentState = {
     furniture: JSON.parse(JSON.stringify(state.furniture)),
+    measurements: JSON.parse(JSON.stringify(state.measurements)),
+    obstacles: JSON.parse(JSON.stringify(state.obstacles)),
     selectedFurniture: state.selectedFurniture
       ? state.furniture.indexOf(state.selectedFurniture)
+      : null,
+    selectedObstacle: state.selectedObstacle
+      ? state.obstacles.indexOf(state.selectedObstacle)
       : null,
   };
 
@@ -680,8 +725,13 @@ function undo() {
   // Push current state to redo stack
   const currentState = {
     furniture: JSON.parse(JSON.stringify(state.furniture)),
+    measurements: JSON.parse(JSON.stringify(state.measurements)),
+    obstacles: JSON.parse(JSON.stringify(state.obstacles)),
     selectedFurniture: state.selectedFurniture
       ? state.furniture.indexOf(state.selectedFurniture)
+      : null,
+    selectedObstacle: state.selectedObstacle
+      ? state.obstacles.indexOf(state.selectedObstacle)
       : null,
   };
   state.redoStack.push(currentState);
@@ -689,6 +739,8 @@ function undo() {
   // Pop state from undo stack and restore it
   const previousState = state.undoStack.pop();
   state.furniture = JSON.parse(JSON.stringify(previousState.furniture));
+  state.measurements = JSON.parse(JSON.stringify(previousState.measurements));
+  state.obstacles = JSON.parse(JSON.stringify(previousState.obstacles || []));
 
   // Restore selected furniture
   if (
@@ -700,8 +752,23 @@ function undo() {
     state.selectedFurniture = null;
   }
 
+  // Restore selected obstacle
+  if (
+    previousState.selectedObstacle !== null &&
+    previousState.selectedObstacle < state.obstacles.length
+  ) {
+    state.selectedObstacle = state.obstacles[previousState.selectedObstacle];
+  } else {
+    state.selectedObstacle = null;
+  }
+
+  state.selectedMeasurement = null;
   updateSelectedFurniturePanel();
   updateUndoRedoButtons();
+  if (state.measureMode) {
+    renderMeasureList();
+    renderObstacleList();
+  }
   markChanges();
   render();
   saveProject();
@@ -714,8 +781,13 @@ function redo() {
   // Push current state to undo stack
   const currentState = {
     furniture: JSON.parse(JSON.stringify(state.furniture)),
+    measurements: JSON.parse(JSON.stringify(state.measurements)),
+    obstacles: JSON.parse(JSON.stringify(state.obstacles)),
     selectedFurniture: state.selectedFurniture
       ? state.furniture.indexOf(state.selectedFurniture)
+      : null,
+    selectedObstacle: state.selectedObstacle
+      ? state.obstacles.indexOf(state.selectedObstacle)
       : null,
   };
   state.undoStack.push(currentState);
@@ -723,6 +795,8 @@ function redo() {
   // Pop state from redo stack and restore it
   const nextState = state.redoStack.pop();
   state.furniture = JSON.parse(JSON.stringify(nextState.furniture));
+  state.measurements = JSON.parse(JSON.stringify(nextState.measurements));
+  state.obstacles = JSON.parse(JSON.stringify(nextState.obstacles || []));
 
   // Restore selected furniture
   if (
@@ -734,8 +808,23 @@ function redo() {
     state.selectedFurniture = null;
   }
 
+  // Restore selected obstacle
+  if (
+    nextState.selectedObstacle !== null &&
+    nextState.selectedObstacle < state.obstacles.length
+  ) {
+    state.selectedObstacle = state.obstacles[nextState.selectedObstacle];
+  } else {
+    state.selectedObstacle = null;
+  }
+
+  state.selectedMeasurement = null;
   updateSelectedFurniturePanel();
   updateUndoRedoButtons();
+  if (state.measureMode) {
+    renderMeasureList();
+    renderObstacleList();
+  }
   markChanges();
   render();
   saveProject();
@@ -885,6 +974,9 @@ function updateAllUIText() {
   // Update selected furniture panel if visible
   updateSelectedFurniturePanel();
 
+  // Update measurement panel if the tool is active
+  if (state.measureMode) renderMeasurePanel();
+
   // Update project name if it's still the default
   const defaultNames = ["Untitled Project", "Unbenanntes Projekt"];
   if (defaultNames.includes(state.projectName)) {
@@ -935,6 +1027,34 @@ function setupEventListeners() {
   document
     .getElementById("cancelCropBtn")
     .addEventListener("click", cancelCrop);
+
+  // Measurement tool
+  document.getElementById("measureBtn").addEventListener("click", toggleMeasureMode);
+  document
+    .getElementById("measureScale")
+    .addEventListener("change", handleMeasureScaleChange);
+  document
+    .getElementById("exportMeasureImage")
+    .addEventListener("click", exportMeasurementImage);
+  document
+    .getElementById("clearMeasurements")
+    .addEventListener("click", clearMeasurements);
+  document
+    .getElementById("exitMeasureMode")
+    .addEventListener("click", exitMeasureMode);
+  document
+    .getElementById("addObstacleBtn")
+    .addEventListener("click", toggleAddObstacleMode);
+  canvas.addEventListener("contextmenu", (e) => {
+    if (state.measureMode) {
+      e.preventDefault();
+      if (state.addObstacleMode && state.obstacleDraftStart) {
+        cancelObstacleDraft();
+      } else {
+        cancelMeasureDraft();
+      }
+    }
+  });
 
   // Undo/Redo controls
   document.getElementById("undoBtn").addEventListener("click", undo);
@@ -1199,6 +1319,20 @@ function applyCrop() {
       furniture.y -= y1;
     });
 
+    // Adjust measurements (translate by crop offset)
+    state.measurements.forEach((measurement) => {
+      measurement.x1 -= x1;
+      measurement.y1 -= y1;
+      measurement.x2 -= x1;
+      measurement.y2 -= y1;
+    });
+
+    // Adjust fixed installations (translate by crop offset)
+    state.obstacles.forEach((obstacle) => {
+      obstacle.x -= x1;
+      obstacle.y -= y1;
+    });
+
     // Adjust calibration points if they exist
     if (state.calibrationStart) {
       state.calibrationStart.x -= x1;
@@ -1217,6 +1351,1095 @@ function applyCrop() {
     saveProject();
   };
   img.src = croppedDataUrl;
+}
+
+// ========== MEASUREMENT TOOL (GRUNDRISS MAßZEICHNUNG) ==========
+
+// Toggle measurement mode
+function toggleMeasureMode() {
+  if (state.measureMode) {
+    exitMeasureMode();
+  } else {
+    startMeasureMode();
+  }
+}
+
+// Enter measurement mode
+function startMeasureMode() {
+  if (state.calibrationMode) cancelCalibration();
+  if (state.cropMode) cancelCrop();
+
+  state.measureMode = true;
+  state.selectedFurniture = null;
+  state.selectedMeasurement = null;
+  // Obstacle flow is off by default; user opts in via the panel button
+  state.addObstacleMode = false;
+  state.obstacleDraftStart = null;
+  state.obstacleDraftEnd = null;
+  state.selectedObstacle = null;
+
+  canvas.style.cursor = "crosshair";
+  document.getElementById("measureBtn").classList.add("active");
+  document.getElementById("measureBtn").setAttribute("aria-pressed", "true");
+
+  renderMeasurePanel();
+  render();
+}
+
+// Exit measurement mode
+function exitMeasureMode() {
+  state.measureMode = false;
+  state.measureDraftStart = null;
+  state.measureDraftEnd = null;
+  state.selectedMeasurement = null;
+  state.addObstacleMode = false;
+  state.obstacleDraftStart = null;
+  state.obstacleDraftEnd = null;
+  state.selectedObstacle = null;
+
+  canvas.style.cursor = "grab";
+  document.getElementById("measureBtn").classList.remove("active");
+  document.getElementById("measureBtn").setAttribute("aria-pressed", "false");
+
+  updateSidebarPanels();
+  updateSelectedFurniturePanel();
+  render();
+}
+
+// Cancel a measurement draft in progress
+function cancelMeasureDraft() {
+  state.measureDraftStart = null;
+  state.measureDraftEnd = null;
+  renderMeasurePanel();
+  render();
+}
+
+// Change the active measurement type
+function setActiveMeasureType(typeId) {
+  if (!getMeasureType(typeId)) return;
+  state.measureActiveType = typeId;
+  cancelMeasureDraft();
+}
+
+// Handle scale input change
+function handleMeasureScaleChange(e) {
+  const v = parseFloat(e.target.value);
+  if (!Number.isFinite(v) || v <= 0) {
+    e.target.value = state.pixelsPerMeter || DEFAULT_MEASURE_SCALE;
+    return;
+  }
+  state.pixelsPerMeter = v;
+  updateScaleDisplay();
+  renderMeasurePanel();
+  render();
+}
+
+// Compute the real length (cm) of a measurement stroke
+function measurementStrokeCm(x1, y1, x2, y2) {
+  const ppm = state.pixelsPerMeter || DEFAULT_MEASURE_SCALE;
+  const px = Math.hypot(x2 - x1, y2 - y1);
+  return px / (ppm / 100);
+}
+
+// Format a length in cm for display
+function formatLength(cm) {
+  return Math.round(cm) + " cm";
+}
+
+// Add a new measurement between two points
+function addMeasurement(type, x1, y1, x2, y2) {
+  if (Math.hypot(x2 - x1, y2 - y1) < 2) return;
+  const measurement = {
+    id: Date.now() + "_" + Math.random().toString(36).slice(2, 7),
+    type,
+    x1,
+    y1,
+    x2,
+    y2,
+  };
+  pushUndoState();
+  state.measurements.push(measurement);
+  state.selectedMeasurement = measurement;
+  markChanges();
+  saveProject();
+  renderMeasurePanel();
+  render();
+  return measurement;
+}
+
+// Look up a measurement type by id
+function getMeasureType(typeId) {
+  return MEASUREMENT_TYPES.find((tp) => tp.id === typeId);
+}
+
+// Delete a measurement by id
+function deleteMeasurement(id) {
+  const index = state.measurements.findIndex((m) => m.id === id);
+  if (index < 0) return;
+  if (!confirm(t("measure.deleteConfirm"))) return;
+  state.measurements.splice(index, 1);
+  if (state.selectedMeasurement && state.selectedMeasurement.id === id) {
+    state.selectedMeasurement = null;
+  }
+  markChanges();
+  saveProject();
+  renderMeasurePanel();
+  render();
+}
+
+// Clear all measurements
+function clearMeasurements() {
+  if (state.measurements.length === 0) return;
+  if (!confirm(t("measure.clearAllConfirm"))) return;
+  pushUndoState();
+  state.measurements = [];
+  state.selectedMeasurement = null;
+  cancelMeasureDraft();
+  markChanges();
+  saveProject();
+  renderMeasurePanel();
+}
+
+// Set the drawing scale so a measurement's drawn length matches its real value
+function setMeasurementAsScale(id) {
+  const measurement = state.measurements.find((m) => m.id === id);
+  if (!measurement) return;
+  const input = document.querySelector(`[data-attach="${id}"]`);
+  const realCm = parseFloat(input ? input.value : NaN);
+  if (!Number.isFinite(realCm) || realCm <= 0) {
+    alert(t("messages.enterValidLength"));
+    return;
+  }
+  const px = Math.hypot(
+    measurement.x2 - measurement.x1,
+    measurement.y2 - measurement.y1,
+  );
+  state.pixelsPerMeter = px / (realCm / 100);
+  updateScaleDisplay();
+  renderMeasurePanel();
+  render();
+  saveProject();
+}
+
+// Hit test a point against existing measurements
+function hitTestMeasurement(x, y) {
+  const threshold = 12;
+  for (const m of state.measurements) {
+    const dx = m.x2 - m.x1;
+    const dy = m.y2 - m.y1;
+    const len = Math.hypot(dx, dy);
+    if (len < 1e-6) continue;
+    const ux = dx / len;
+    const uy = dy / len;
+    const px = -uy;
+    const py = ux;
+    const off = MEASURE_DIM_OFFSET;
+    const ax1 = m.x1 + px * off;
+    const ay1 = m.y1 + py * off;
+    const ax2 = m.x2 + px * off;
+    const ay2 = m.y2 + py * off;
+    if (distToSegment(x, y, ax1, ay1, ax2, ay2) <= threshold) return m;
+    if (distToSegment(x, y, m.x1, m.y1, m.x2, m.y2) <= threshold * 0.6) {
+      return m;
+    }
+  }
+  return null;
+}
+
+// Distance from point to segment
+function distToSegment(px, py, x1, y1, x2, y2) {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const l2 = dx * dx + dy * dy;
+  if (l2 === 0) return Math.hypot(px - x1, py - y1);
+  let tt = ((px - x1) * dx + (py - y1) * dy) / l2;
+  tt = Math.max(0, Math.min(1, tt));
+  return Math.hypot(px - (x1 + tt * dx), py - (y1 + tt * dy));
+}
+
+// Render the measurement sidebar panel
+function renderMeasurePanel() {
+  const panel = document.getElementById("measurePanel");
+  if (!panel) return;
+
+  updateSidebarPanels();
+
+  // Scale input
+  const scaleInput = document.getElementById("measureScale");
+  scaleInput.value = Math.round((state.pixelsPerMeter || DEFAULT_MEASURE_SCALE) * 10) / 10;
+
+  // Type buttons (acts as picker + inline legend)
+  const typesContainer = document.getElementById("measureTypes");
+  typesContainer.innerHTML = MEASUREMENT_TYPES.map(
+    (tp) => `
+    <button
+      type="button"
+      class="measure-type-btn${tp.id === state.measureActiveType ? " active" : ""}"
+      data-type="${tp.id}"
+      style="--tcolor:${tp.color}"
+    >
+      <span class="measure-swatch" style="background:${tp.color}"></span>
+      <span class="measure-code">${tp.code}</span>
+      <span class="measure-type-name">${t("measure." + tp.id)}</span>
+    </button>`,
+  ).join("");
+
+  typesContainer.querySelectorAll(".measure-type-btn").forEach((btn) => {
+    btn.addEventListener("click", () => setActiveMeasureType(btn.dataset.type));
+  });
+
+  // Legend
+  document.getElementById("measureLegend").innerHTML =
+    `<div class="measure-legend-title">${t("measure.legendTitle")} <span class="measure-legend-unit">(${t("measure.legendUnit")})</span></div>` +
+    MEASUREMENT_TYPES.map(
+      (tp) =>
+        `<div class="measure-legend-row"><span class="measure-swatch" style="background:${tp.color}"></span><span class="measure-code">${tp.code}</span><span>${t("measure." + tp.id)}</span></div>`,
+    ).join("") +
+    `<div class="measure-legend-group">${t("measure.obstacleTitle")}</div>` +
+    OBSTACLE_TYPES.map(
+      (tp) =>
+        `<div class="measure-legend-row"><span class="measure-swatch" style="background:${tp.color}"></span><span class="measure-code">${tp.code}</span><span>${t("measure." + tp.id)}</span></div>`,
+    ).join("");
+
+  // Obstacle type buttons
+  const obsTypesContainer = document.getElementById("obstacleTypes");
+  obsTypesContainer.innerHTML = OBSTACLE_TYPES.map(
+    (tp) => `
+    <button
+      type="button"
+      class="measure-type-btn${tp.id === state.obstacleActiveType ? " active" : ""}"
+      data-obstacle-type="${tp.id}"
+      style="--tcolor:${tp.color}"
+    >
+      <span class="measure-swatch" style="background:${tp.color}"></span>
+      <span class="measure-code">${tp.code}</span>
+      <span class="measure-type-name">${t("measure." + tp.id)}</span>
+    </button>`,
+  ).join("");
+  obsTypesContainer
+    .querySelectorAll(".measure-type-btn")
+    .forEach((btn) => {
+      btn.addEventListener("click", () =>
+        setObstacleActiveType(btn.dataset.obstacleType),
+      );
+    });
+  document.getElementById("obstacleHeading").textContent =
+    t("measure.obstacleTitle");
+
+  // Add-obstacle toggle button
+  const addBtn = document.getElementById("addObstacleBtn");
+  addBtn.classList.toggle("active", state.addObstacleMode);
+  addBtn.textContent = (state.addObstacleMode ? "✓ " : "＋ ") + t("measure.addObstacle");
+
+  // Status hint
+  const statusEl = document.getElementById("measureStatus");
+  if (state.addObstacleMode) {
+    statusEl.textContent = state.obstacleDraftStart
+      ? t("measure.obstacleSecondCorner")
+      : t("measure.obstacleFirstCorner");
+  } else if (state.measureDraftStart) {
+    const end = state.measureDraftEnd || state.measureDraftStart;
+    const cm = measurementStrokeCm(
+      state.measureDraftStart.x,
+      state.measureDraftStart.y,
+      end.x,
+      end.y,
+    );
+    statusEl.textContent =
+      t("measure.readyForSecond") +
+      `  →  ${formatLength(cm)}`;
+  } else {
+    statusEl.textContent = t("measure.firstPoint");
+  }
+
+  renderMeasureList();
+  renderObstacleList();
+}
+
+// Render the measurement list
+function renderMeasureList() {
+  const list = document.getElementById("measureList");
+  if (!list) return;
+
+  if (state.measurements.length === 0) {
+    list.innerHTML = `<div class="measure-empty">${t("measure.noMeasurements")}</div>`;
+    return;
+  }
+
+  list.innerHTML = state.measurements
+    .map((m, i) => {
+      const tp = getMeasureType(m.type) || getMeasureType("other");
+      const cm = measurementStrokeCm(m.x1, m.y1, m.x2, m.y2);
+      const selected = state.selectedMeasurement === m ? " selected" : "";
+      return `
+      <div class="measure-item${selected}" data-mid="${m.id}">
+        <div class="measure-item-head">
+          <span class="measure-swatch" style="background:${tp.color}"></span>
+          <span class="measure-code">${tp.code}</span>
+          <span class="measure-item-label">${i + 1}. ${t("measure." + m.type)}</span>
+          <span class="measure-item-dist">${formatLength(cm)}</span>
+        </div>
+        <div class="measure-item-controls">
+          <label class="measure-item-val">${t("measure.valueLabel")}:
+            <input type="number" step="1" min="1" value="${Math.round(cm)}" data-attach="${m.id}" aria-label="length" />
+          </label>
+          <button class="measure-ref-btn" data-id="${m.id}" title="${t("measure.setAsScale")}">⚑</button>
+          <button class="measure-del-btn" data-id="${m.id}" aria-label="${t("measure.delete")}">🗑</button>
+        </div>
+      </div>`;
+    })
+    .join("");
+
+  list.querySelectorAll(".measure-item").forEach((item) => {
+    item.addEventListener("click", (e) => {
+      if (e.target.closest("button")) return;
+      if (e.target.tagName === "INPUT") return;
+      const mid = item.dataset.mid;
+      const m = state.measurements.find((mm) => mm.id === mid);
+      if (m) {
+        state.selectedMeasurement = m;
+        renderMeasureList();
+        render();
+      }
+    });
+  });
+
+  list.querySelectorAll(".measure-ref-btn").forEach((btn) => {
+    btn.addEventListener("click", () => setMeasurementAsScale(btn.dataset.id));
+  });
+
+  list.querySelectorAll(".measure-del-btn").forEach((btn) => {
+    btn.addEventListener("click", () => deleteMeasurement(btn.dataset.id));
+  });
+}
+
+// Ensure the correct sidebar section is visible
+function updateSidebarPanels() {
+  const listSection = document.querySelector(".section");
+  const propsPanel = document.getElementById("selectedFurniturePanel");
+  const measurePanel = document.getElementById("measurePanel");
+
+  if (state.measureMode) {
+    listSection.style.display = "none";
+    propsPanel.style.display = "none";
+    measurePanel.style.display = "block";
+  } else if (state.selectedFurniture) {
+    listSection.style.display = "none";
+    propsPanel.style.display = "block";
+    measurePanel.style.display = "none";
+  } else {
+    listSection.style.display = "block";
+    propsPanel.style.display = "none";
+    measurePanel.style.display = "none";
+  }
+}
+
+// Draw a subtle construction grid (for from-scratch Grundrisse)
+function drawMeasureGrid(targetCtx, t) {
+  const ppm = state.pixelsPerMeter || DEFAULT_MEASURE_SCALE;
+  const step = (50 / 100) * ppm; // 50 cm grid
+  if (step < 8) return;
+
+  targetCtx.save();
+  targetCtx.lineWidth = 1;
+
+  for (let gx = Math.ceil(t.x0 / step) * step; gx <= t.x1; gx += step) {
+    targetCtx.strokeStyle =
+      Math.round(gx / step) % 2 === 0
+        ? "rgba(0, 0, 0, 0.10)"
+        : "rgba(0, 0, 0, 0.05)";
+    targetCtx.beginPath();
+    targetCtx.moveTo(gx, t.y0);
+    targetCtx.lineTo(gx, t.y1);
+    targetCtx.stroke();
+  }
+  for (let gy = Math.ceil(t.y0 / step) * step; gy <= t.y1; gy += step) {
+    targetCtx.strokeStyle =
+      Math.round(gy / step) % 2 === 0
+        ? "rgba(0, 0, 0, 0.10)"
+        : "rgba(0, 0, 0, 0.05)";
+    targetCtx.beginPath();
+    targetCtx.moveTo(t.x0, gy);
+    targetCtx.lineTo(t.x1, gy);
+    targetCtx.stroke();
+  }
+  targetCtx.restore();
+}
+
+// Draw all measurements (and the draft while measuring)
+function drawMeasurementsLayer(targetCtx) {
+  state.measurements.forEach((m) => drawMeasurement(m, targetCtx, 1, 0, 0));
+  if (state.measureMode && state.measureDraftStart) {
+    const end = state.measureDraftEnd || state.measureDraftStart;
+    drawMeasurementDraft(targetCtx, state.measureDraftStart, end);
+  }
+}
+
+// Draw the drafting preview line while placing a measurement
+function drawMeasurementDraft(targetCtx, a, b) {
+  const tp = getMeasureType(state.measureActiveType) || getMeasureType("other");
+  const cm = measurementStrokeCm(a.x, a.y, b.x, b.y);
+  const label = `${tp.code} ${formatLength(cm)}`;
+
+  targetCtx.save();
+  targetCtx.setLineDash([6, 4]);
+  targetCtx.strokeStyle = tp.color;
+  targetCtx.lineWidth = 1.6;
+  targetCtx.beginPath();
+  targetCtx.moveTo(a.x, a.y);
+  targetCtx.lineTo(b.x, b.y);
+  targetCtx.stroke();
+  targetCtx.setLineDash([]);
+
+  targetCtx.fillStyle = tp.color;
+  targetCtx.beginPath();
+  targetCtx.arc(a.x, a.y, 4, 0, Math.PI * 2);
+  targetCtx.fill();
+  targetCtx.beginPath();
+  targetCtx.arc(b.x, b.y, 4, 0, Math.PI * 2);
+  targetCtx.fill();
+
+  targetCtx.font = "bold 13px sans-serif";
+  targetCtx.textAlign = "center";
+  targetCtx.textBaseline = "middle";
+  const midX = (a.x + b.x) / 2;
+  const midY = (a.y + b.y) / 2;
+  const tw = targetCtx.measureText(label).width;
+  targetCtx.fillStyle = "rgba(255, 255, 255, 0.85)";
+  targetCtx.fillRect(midX - tw / 2 - 4, midY - 18, tw + 8, 20);
+  targetCtx.fillStyle = tp.color;
+  targetCtx.fillText(label, midX, midY - 8);
+  targetCtx.restore();
+}
+
+// Draw a single measurement as a CAD-style dimension
+function drawMeasurement(m, targetCtx, s, ox, oy) {
+  const tp = getMeasureType(m.type) || getMeasureType("other");
+  const selected = state.selectedMeasurement === m;
+  const color = selected ? "#FF1493" : tp.color;
+
+  const x1 = m.x1 * s + ox;
+  const y1 = m.y1 * s + oy;
+  const x2 = m.x2 * s + ox;
+  const y2 = m.y2 * s + oy;
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const len = Math.hypot(dx, dy);
+  if (len < 1e-6) return;
+
+  const ux = dx / len;
+  const uy = dy / len;
+  const px = -uy;
+  const py = ux;
+  const off = MEASURE_DIM_OFFSET * s;
+  const ext = MEASURE_EXT_LEN * s;
+  const lw = (selected ? 2.2 : 1.5) * s;
+  const arrowLen = 7 * s;
+
+  targetCtx.save();
+
+  // Wall trace (thick line along the wall for room outlines)
+  if (tp.id === "wall") {
+    targetCtx.strokeStyle = "#2c3e50";
+    targetCtx.lineWidth = 5 * s;
+    targetCtx.lineCap = "round";
+    targetCtx.beginPath();
+    targetCtx.moveTo(x1, y1);
+    targetCtx.lineTo(x2, y2);
+    targetCtx.stroke();
+  }
+
+  // Extension ticks
+  targetCtx.strokeStyle = color;
+  targetCtx.lineWidth = lw;
+  [
+    [x1, y1],
+    [x2, y2],
+  ].forEach((p) => {
+    const ex1x = p[0] + px * (off - ext);
+    const ex1y = p[1] + py * (off - ext);
+    const ex2x = p[0] + px * (off + ext * 0.8);
+    const ex2y = p[1] + py * (off + ext * 0.8);
+    targetCtx.beginPath();
+    targetCtx.moveTo(ex1x, ex1y);
+    targetCtx.lineTo(ex2x, ex2y);
+    targetCtx.stroke();
+  });
+
+  // Dimension line (offset from the measured segment)
+  const ax1 = x1 + px * off;
+  const ay1 = y1 + py * off;
+  const ax2 = x2 + px * off;
+  const ay2 = y2 + py * off;
+  targetCtx.beginPath();
+  targetCtx.moveTo(ax1, ay1);
+  targetCtx.lineTo(ax2, ay2);
+  targetCtx.stroke();
+
+  // Arrowheads pointing inward
+  drawArrowTip(targetCtx, ax1, ay1, ax2, ay2, arrowLen, color);
+  drawArrowTip(targetCtx, ax2, ay2, ax1, ay1, arrowLen, color);
+
+  // Endpoint markers
+  targetCtx.fillStyle = color;
+  [
+    [x1, y1],
+    [x2, y2],
+  ].forEach((p) => {
+    targetCtx.beginPath();
+    targetCtx.arc(p[0], p[1], 3.2 * s, 0, Math.PI * 2);
+    targetCtx.fill();
+  });
+
+  // Label with white halo
+  const label = `${tp.code} ${formatLength(measurementStrokeCm(m.x1, m.y1, m.x2, m.y2))}`;
+  targetCtx.font = `bold ${Math.max(11, 13 * s)}px sans-serif`;
+  targetCtx.textAlign = "center";
+  targetCtx.textBaseline = "middle";
+  const midX = (ax1 + ax2) / 2;
+  const midY = (ay1 + ay2) / 2;
+  const labelY = midY - 7 * s;
+  const tw = targetCtx.measureText(label).width;
+  targetCtx.fillStyle = "rgba(255, 255, 255, 0.85)";
+  targetCtx.fillRect(midX - tw / 2 - 4 * s, labelY - 9 * s, tw + 8 * s, 18 * s);
+  targetCtx.fillStyle = color;
+  targetCtx.fillText(label, midX, labelY);
+
+  targetCtx.restore();
+}
+
+// Draw a filled arrowhead pointing from tip toward the target point
+function drawArrowTip(targetCtx, tipX, tipY, towardX, towardY, size, color) {
+  const dx = towardX - tipX;
+  const dy = towardY - tipY;
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len;
+  const uy = dy / len;
+  const px = -uy;
+  const py = ux;
+  targetCtx.fillStyle = color;
+  targetCtx.beginPath();
+  targetCtx.moveTo(tipX, tipY);
+  targetCtx.lineTo(
+    tipX - ux * size + px * size * 0.45,
+    tipY - uy * size + py * size * 0.45,
+  );
+  targetCtx.lineTo(
+    tipX - ux * size - px * size * 0.45,
+    tipY - uy * size - py * size * 0.45,
+  );
+  targetCtx.closePath();
+  targetCtx.fill();
+}
+
+// ========== FIXED INSTALLATIONS / OBSTRUCTIONS ==========
+
+function escapeHtml(str) {
+  return String(str).replace(
+    /[&<>"']/g,
+    (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+        c
+      ],
+  );
+}
+
+function getObstacleType(typeId) {
+  return OBSTACLE_TYPES.find((tp) => tp.id === typeId);
+}
+
+function setObstacleActiveType(typeId) {
+  if (!getObstacleType(typeId)) return;
+  state.obstacleActiveType = typeId;
+  renderMeasurePanel();
+}
+
+function toggleAddObstacleMode() {
+  if (state.addObstacleMode) {
+    exitAddObstacleMode();
+  } else {
+    startAddObstacleMode();
+  }
+}
+
+function startAddObstacleMode() {
+  state.addObstacleMode = true;
+  state.obstacleDraftStart = null;
+  state.obstacleDraftEnd = null;
+  // cancel any pending measurement draft so modes don't mix
+  state.measureDraftStart = null;
+  state.measureDraftEnd = null;
+  state.selectedMeasurement = null;
+  state.selectedObstacle = null;
+  canvas.style.cursor = "crosshair";
+  renderMeasurePanel();
+  render();
+}
+
+function exitAddObstacleMode() {
+  state.addObstacleMode = false;
+  state.obstacleDraftStart = null;
+  state.obstacleDraftEnd = null;
+  canvas.style.cursor = "crosshair";
+  renderMeasurePanel();
+  render();
+}
+
+function cancelObstacleDraft() {
+  state.obstacleDraftStart = null;
+  state.obstacleDraftEnd = null;
+  renderMeasurePanel();
+  render();
+}
+
+// Add a rectangular obstacle from two diagonal corner points
+function addObstacle(type, x1, y1, x2, y2) {
+  const w = Math.abs(x2 - x1);
+  const h = Math.abs(y2 - y1);
+  if (w < 3 || h < 3) return null;
+  if (!getObstacleType(type)) type = DEFAULT_OBSTACLE_TYPE;
+  pushUndoState();
+  const obstacle = {
+    id: Date.now() + "_" + Math.random().toString(36).slice(2, 7),
+    type,
+    x: (x1 + x2) / 2,
+    y: (y1 + y2) / 2,
+    widthPx: w,
+    heightPx: h,
+    name: t("measure." + type),
+  };
+  state.obstacles.push(obstacle);
+  state.selectedObstacle = obstacle;
+  markChanges();
+  saveProject();
+  renderMeasurePanel();
+  render();
+  return obstacle;
+}
+
+function hitTestObstacle(x, y) {
+  for (const ob of state.obstacles) {
+    const w = ob.widthPx / 2;
+    const h = ob.heightPx / 2;
+    if (Math.abs(x - ob.x) <= w && Math.abs(y - ob.y) <= h) return ob;
+  }
+  return null;
+}
+
+function deleteObstacle(id) {
+  const index = state.obstacles.findIndex((o) => o.id === id);
+  if (index < 0) return;
+  if (!confirm(t("measure.obstacleDeleteConfirm"))) return;
+  pushUndoState();
+  state.obstacles.splice(index, 1);
+  if (state.selectedObstacle && state.selectedObstacle.id === id) {
+    state.selectedObstacle = null;
+  }
+  markChanges();
+  saveProject();
+  renderMeasurePanel();
+  render();
+}
+
+function clearObstacles() {
+  if (!state.obstacles.length) return;
+  if (!confirm(t("measure.obstacleClearConfirm"))) return;
+  pushUndoState();
+  state.obstacles = [];
+  state.selectedObstacle = null;
+  markChanges();
+  saveProject();
+  renderMeasurePanel();
+  render();
+}
+
+// Update a single property (name / width-cm / depth-cm) of an obstacle
+function updateObstacleField(id, field, value) {
+  const ob = state.obstacles.find((o) => o.id === id);
+  if (!ob) return;
+  const ppm = state.pixelsPerMeter || DEFAULT_MEASURE_SCALE;
+  let changed = false;
+  if (field === "name") {
+    ob.name = value;
+    changed = true;
+  } else {
+    const cm = parseFloat(value);
+    if (Number.isFinite(cm) && cm > 0) {
+      if (field === "width") {
+        ob.widthPx = (cm / 100) * ppm;
+      } else if (field === "depth") {
+        ob.heightPx = (cm / 100) * ppm;
+      }
+      changed = true;
+    }
+  }
+  if (!changed) return;
+  markChanges();
+  saveProject();
+  renderMeasurePanel();
+  render();
+}
+
+function renderObstacleList() {
+  const list = document.getElementById("obstacleList");
+  if (!list) return;
+  if (!state.obstacles.length) {
+    list.innerHTML = "";
+    return;
+  }
+  const ppm = state.pixelsPerMeter || DEFAULT_MEASURE_SCALE;
+  list.innerHTML = state.obstacles
+    .map((ob, i) => {
+      const tp = getObstacleType(ob.type) || getObstacleType(DEFAULT_OBSTACLE_TYPE);
+      const selected = state.selectedObstacle === ob ? " selected" : "";
+      const wCm = Math.round(ob.widthPx / (ppm / 100));
+      const hCm = Math.round(ob.heightPx / (ppm / 100));
+      return `
+      <div class="obstacle-item${selected}" data-obsid="${ob.id}" role="listitem">
+        <div class="obstacle-item-head">
+          <span class="measure-swatch" style="background:${tp.color}"></span>
+          <span class="measure-code">${tp.code}</span>
+          <span class="obstacle-item-name">${i + 1}. ${escapeHtml(ob.name || t("measure." + ob.type))}</span>
+          <button class="obstacle-del-btn" data-id="${ob.id}" aria-label="${t("measure.delete")}">🗑</button>
+        </div>
+        <div class="obstacle-item-controls">
+          <label>${t("measure.obstacleWidth")}</label>
+          <input type="number" step="1" min="1" value="${wCm}" data-obsf="width" data-id="${ob.id}" aria-label="${t("measure.obstacleWidth")}" />
+          <label>${t("measure.obstacleDepth")}</label>
+          <input type="number" step="1" min="1" value="${hCm}" data-obsf="depth" data-id="${ob.id}" aria-label="${t("measure.obstacleDepth")}" />
+        </div>
+        <div class="obstacle-item-name-field">
+          <span>${t("measure.obstacleName")}</span>
+          <input type="text" value="${escapeHtml(ob.name || "")}" data-obsf="name" data-id="${ob.id}" aria-label="${t("measure.obstacleName")}" />
+        </div>
+      </div>`;
+    })
+    .join("");
+
+  list.querySelectorAll(".obstacle-item").forEach((row) => {
+    const id = row.getAttribute("data-obsid");
+    row.addEventListener("click", (ev) => {
+      if (ev.target.closest("input") || ev.target.closest("button")) return;
+      const ob = state.obstacles.find((o) => o.id === id);
+      if (!ob) return;
+      state.selectedObstacle = ob;
+      state.selectedMeasurement = null;
+      renderMeasurePanel();
+      render();
+    });
+  });
+  list.querySelectorAll(".obstacle-del-btn").forEach((btn) => {
+    btn.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      deleteObstacle(btn.getAttribute("data-id"));
+    });
+  });
+  list.querySelectorAll("input[data-obsf]").forEach((inp) => {
+    inp.addEventListener("change", () => {
+      updateObstacleField(
+        inp.getAttribute("data-id"),
+        inp.getAttribute("data-obsf"),
+        inp.value,
+      );
+    });
+  });
+}
+
+// Draw all fixed installations on the given context (world-space, unrotated)
+function drawObstaclesLayer(targetCtx) {
+  state.obstacles.forEach((ob) => drawObstacle(ob, targetCtx, 1, 0, 0));
+  if (state.measureMode && state.addObstacleMode && state.obstacleDraftStart) {
+    const end = state.obstacleDraftEnd || state.obstacleDraftStart;
+    drawObstacleDraft(targetCtx, state.obstacleDraftStart, end);
+  }
+}
+
+function drawObstacle(ob, targetCtx, s, ox, oy) {
+  const tp = getObstacleType(ob.type) || getObstacleType(DEFAULT_OBSTACLE_TYPE);
+  const selected = state.selectedObstacle === ob;
+  const x = ob.x * s + ox;
+  const y = ob.y * s + oy;
+  const w = ob.widthPx * s;
+  const h = ob.heightPx * s;
+  const left = x - w / 2;
+  const top = y - h / 2;
+  const lineColor = selected ? "#FF1493" : tp.color;
+  const ppm = state.pixelsPerMeter || DEFAULT_MEASURE_SCALE;
+  const wCm = Math.round(ob.widthPx / (ppm / 100));
+  const hCm = Math.round(ob.heightPx / (ppm / 100));
+  const label = ob.name || t("measure." + ob.type);
+
+  targetCtx.save();
+
+  // translucent fill
+  targetCtx.fillStyle = lineColor;
+  targetCtx.globalAlpha = 0.25;
+  targetCtx.fillRect(left, top, w, h);
+  targetCtx.globalAlpha = 1;
+
+  // diagonal hatch to signal "occupies space"
+  targetCtx.strokeStyle = lineColor;
+  targetCtx.globalAlpha = 0.7;
+  targetCtx.lineWidth = 1 * s;
+  const step = Math.max(9 * s, 6);
+  for (let lx = left - h; lx < left + w + step; lx += step) {
+    targetCtx.beginPath();
+    targetCtx.moveTo(lx, top + h);
+    targetCtx.lineTo(lx + h, top);
+    targetCtx.stroke();
+  }
+  targetCtx.globalAlpha = 1;
+
+  // border
+  targetCtx.lineWidth = (selected ? 2.5 : 1.8) * s;
+  targetCtx.strokeRect(left, top, w, h);
+
+  // corner markers when selected
+  if (selected) {
+    targetCtx.fillStyle = "#FF1493";
+    const cs = 5 * s;
+    [
+      [left, top],
+      [left + w, top],
+      [left, top + h],
+      [left + w, top + h],
+    ].forEach(([cx, cy]) =>
+      targetCtx.fillRect(cx - cs / 2, cy - cs / 2, cs, cs),
+    );
+  }
+
+  // centered name label
+  targetCtx.textAlign = "center";
+  targetCtx.textBaseline = "middle";
+  targetCtx.font = `bold ${Math.max(10, 12 * s)}px sans-serif`;
+  const tw = targetCtx.measureText(label).width;
+  const cy = top + h / 2;
+  targetCtx.fillStyle = "rgba(255,255,255,0.9)";
+  targetCtx.fillRect(x - tw / 2 - 3 * s, cy - 8 * s, tw + 6 * s, 16 * s);
+  targetCtx.fillStyle = "#2c3e50";
+  targetCtx.fillText(label, x, cy);
+
+  // width dimension above the obstacle
+  const wText = wCm + " cm";
+  targetCtx.font = `bold ${Math.max(10, 11 * s)}px sans-serif`;
+  const wt = targetCtx.measureText(wText).width;
+  targetCtx.fillStyle = "rgba(255,255,255,0.9)";
+  targetCtx.fillRect(x - wt / 2 - 2 * s, top - 12 * s, wt + 4 * s, 13 * s);
+  targetCtx.fillStyle = "#2c3e50";
+  targetCtx.fillText(wText, x, top - 5 * s);
+
+  // depth dimension on the right side (rotated)
+  const hText = hCm + " cm";
+  targetCtx.save();
+  targetCtx.translate(left + w + 11 * s, cy);
+  targetCtx.rotate(Math.PI / 2);
+  const ht = targetCtx.measureText(hText).width;
+  targetCtx.fillStyle = "rgba(255,255,255,0.9)";
+  targetCtx.fillRect(-ht / 2 - 2 * s, -6.5 * s, ht + 4 * s, 13 * s);
+  targetCtx.fillStyle = "#2c3e50";
+  targetCtx.fillText(hText, 0, 0);
+  targetCtx.restore();
+
+  targetCtx.restore();
+}
+
+// Live ghost while dragging the second corner of an obstacle
+function drawObstacleDraft(targetCtx, a, b) {
+  const tp =
+    getObstacleType(state.obstacleActiveType) || getObstacleType(DEFAULT_OBSTACLE_TYPE);
+  const left = Math.min(a.x, b.x);
+  const top = Math.min(a.y, b.y);
+  const w = Math.abs(b.x - a.x);
+  const h = Math.abs(b.y - a.y);
+  const ppm = state.pixelsPerMeter || DEFAULT_MEASURE_SCALE;
+  const wCm = Math.round(w / (ppm / 100));
+  const hCm = Math.round(h / (ppm / 100));
+
+  targetCtx.save();
+  targetCtx.setLineDash([6, 4]);
+  targetCtx.strokeStyle = tp.color;
+  targetCtx.lineWidth = 1.8;
+  targetCtx.strokeRect(left, top, w, h);
+  targetCtx.setLineDash([]);
+
+  // first corner marker + live size label
+  targetCtx.fillStyle = tp.color;
+  targetCtx.beginPath();
+  targetCtx.arc(a.x, a.y, 4, 0, Math.PI * 2);
+  targetCtx.fill();
+
+  const label = `${tp.code} ${wCm} × ${hCm} cm`;
+  targetCtx.font = "bold 13px sans-serif";
+  targetCtx.textAlign = "center";
+  targetCtx.textBaseline = "middle";
+  const midX = left + w / 2;
+  const labelY = top - 14;
+  const tw = targetCtx.measureText(label).width;
+  targetCtx.fillStyle = "rgba(255,255,255,0.9)";
+  targetCtx.fillRect(midX - tw / 2 - 4, labelY - 9, tw + 8, 18);
+  targetCtx.fillStyle = tp.color;
+  targetCtx.fillText(label, midX, labelY);
+  targetCtx.restore();
+}
+
+// Export the floor plan + measurements + legend as a PNG image
+function exportMeasurementImage() {
+  const hasPlan = !!state.floorPlanImage;
+  if (
+    !hasPlan &&
+    state.measurements.length === 0 &&
+    state.obstacles.length === 0
+  ) {
+    alert(t("measure.noDataToExport"));
+    return;
+  }
+
+  let bx1 = Infinity;
+  let by1 = Infinity;
+  let bx2 = -Infinity;
+  let by2 = -Infinity;
+  state.measurements.forEach((m) => {
+    bx1 = Math.min(bx1, m.x1);
+    by1 = Math.min(by1, m.y1);
+    bx2 = Math.max(bx2, m.x2);
+    by2 = Math.max(by2, m.y2);
+  });
+  state.obstacles.forEach((ob) => {
+    bx1 = Math.min(bx1, ob.x - ob.widthPx / 2);
+    by1 = Math.min(by1, ob.y - ob.heightPx / 2);
+    bx2 = Math.max(bx2, ob.x + ob.widthPx / 2);
+    by2 = Math.max(by2, ob.y + ob.heightPx / 2);
+  });
+  if (hasPlan) {
+    bx1 = Math.min(bx1, 0);
+    by1 = Math.min(by1, 0);
+    bx2 = Math.max(bx2, state.floorPlanImage.width);
+    by2 = Math.max(by2, state.floorPlanImage.height);
+  }
+  if (!Number.isFinite(bx1)) return;
+
+  const pad = 60;
+  const bw = bx2 - bx1;
+  const bh = by2 - by1;
+  const scale = Math.min(1, 3800 / Math.max(bw, bh, 1));
+
+  // Legend band
+  const legendRowH = 22;
+  const obstacleRows = OBSTACLE_TYPES.length;
+  const legendH =
+    24 +
+    legendRowH * MEASUREMENT_TYPES.length +
+    18 +
+    legendRowH * obstacleRows +
+    12;
+
+  const W = Math.max(2, Math.ceil((bw + pad * 2) * scale));
+  const H = Math.max(2, Math.ceil((bh + pad * 2) * scale) + Math.ceil(legendH));
+
+  const exportCanvas = document.createElement("canvas");
+  exportCanvas.width = W;
+  exportCanvas.height = H;
+  const octx = exportCanvas.getContext("2d");
+
+  octx.fillStyle = "#ffffff";
+  octx.fillRect(0, 0, W, H);
+
+  octx.save();
+  octx.scale(scale, scale);
+  octx.translate(pad - bx1, pad - by1);
+
+  if (!hasPlan) {
+    drawMeasureGrid(octx, {
+      s: 1,
+      ox: 0,
+      oy: 0,
+      x0: bx1 - pad,
+      y0: by1 - pad,
+      x1: bx2 + pad,
+      y1: by2 + pad,
+    });
+  } else {
+    octx.drawImage(state.floorPlanImage, 0, 0);
+  }
+  state.obstacles.forEach((ob) => drawObstacle(ob, octx, 1, 0, 0));
+  state.measurements.forEach((m) => drawMeasurement(m, octx, 1, 0, 0));
+  octx.restore();
+
+  // Caption bar with project and scale info
+  const ppm = state.pixelsPerMeter || DEFAULT_MEASURE_SCALE;
+  octx.fillStyle = "#2c3e50";
+  octx.font = "bold 14px sans-serif";
+  octx.textAlign = "left";
+  octx.textBaseline = "alphabetic";
+  octx.fillText(
+    `${state.projectName}  ·  ${Math.round(ppm)} px/m  ·  ${t("measure.legendUnit")}`,
+    12,
+    18,
+  );
+
+  // Legend band at the bottom
+  const ly = H - legendH;
+  octx.fillStyle = "rgba(236, 240, 241, 0.92)";
+  octx.fillRect(0, ly, W, legendH);
+  octx.strokeStyle = "#bdc3c7";
+  octx.strokeRect(0.5, ly + 0.5, W - 1, legendH - 1);
+
+  octx.fillStyle = "#2c3e50";
+  octx.font = "bold 13px sans-serif";
+  octx.fillText(
+    `${t("measure.legendTitle")}  —  ${t("measure.legendUnit")}`,
+    12,
+    ly + 16,
+  );
+
+  MEASUREMENT_TYPES.forEach((tp, i) => {
+    const yy = ly + 30 + i * legendRowH + 8;
+    octx.fillStyle = tp.color;
+    octx.fillRect(14, yy - 9, 12, 12);
+    octx.fillStyle = "#2c3e50";
+    octx.font = "12px sans-serif";
+    octx.fillText(`${tp.code}  =  ${t("measure." + tp.id)}`, 34, yy);
+  });
+
+  // Separator + fixed-installation legend entries
+  const obsTitleY = ly + 30 + MEASUREMENT_TYPES.length * legendRowH + 2;
+  octx.fillStyle = "#7f8c8d";
+  octx.font = "bold 11px sans-serif";
+  octx.fillText(t("measure.obstacleTitle"), 12, obsTitleY + 4);
+  OBSTACLE_TYPES.forEach((tp, i) => {
+    const yy =
+      ly + 30 + (MEASUREMENT_TYPES.length + 1) * legendRowH + i * legendRowH + 8;
+    octx.fillStyle = tp.color;
+    octx.fillRect(14, yy - 9, 12, 12);
+    octx.strokeStyle = "rgba(44,62,80,0.4)";
+    octx.lineWidth = 1;
+    octx.strokeRect(14, yy - 9, 12, 12);
+    octx.fillStyle = "#2c3e50";
+    octx.font = "12px sans-serif";
+    octx.fillText(`${tp.code}  =  ${t("measure." + tp.id)}`, 34, yy);
+  });
+
+  const dateStr = new Date().toLocaleString(getCurrentLocale(), {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  octx.fillStyle = "#7f8c8d";
+  octx.font = "10px sans-serif";
+  octx.textAlign = "right";
+  octx.fillText(dateStr, W - 8, H - 6);
+
+  exportCanvas.toBlob((blob) => {
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Maßplan-${state.projectName.replace(/[^\w\-]+/g, "_")}.png`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }, "image/png");
 }
 
 // Extract scale from PDF text
@@ -1534,16 +2757,37 @@ function render() {
   } else {
     ctx.fillStyle = "#f0f0f0";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "#999";
-    ctx.font = "20px sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("Grundriss hochladen", canvas.width / 2, canvas.height / 2);
+    if (state.measureMode) {
+      // Show a construction grid for from-scratch Grundrisse
+      drawMeasureGrid(ctx, {
+        s: 1,
+        ox: 0,
+        oy: 0,
+        x0: -2000,
+        y0: -2000,
+        x1: 20000,
+        y1: 20000,
+      });
+    } else {
+      ctx.fillStyle = "#999";
+      ctx.font = "20px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("Grundriss hochladen", canvas.width / 2, canvas.height / 2);
+    }
   }
 
-  // Draw furniture
-  state.furniture.forEach((furniture) => {
-    drawFurniture(furniture);
-  });
+  // Draw furniture (hidden while the measurement tool is active)
+  if (!state.measureMode) {
+    state.furniture.forEach((furniture) => {
+      drawFurniture(furniture);
+    });
+  }
+
+  // Draw fixed installations (heaters, built-ins, …)
+  drawObstaclesLayer(ctx);
+
+  // Draw measurements
+  drawMeasurementsLayer(ctx);
 
   // Draw calibration line
   if (state.calibrationMode) {
@@ -1868,6 +3112,77 @@ function screenToCanvas(screenX, screenY) {
 function handleCanvasMouseDown(e) {
   const { x, y } = screenToCanvas(e.clientX, e.clientY);
 
+  // Handle measurement mode
+  if (state.measureMode) {
+    // Middle mouse or Shift-click pans in measure mode
+    if (e.button === 1 || e.shiftKey) {
+      state.isPanning = true;
+      state.panStart = { x: e.clientX - state.pan.x, y: e.clientY - state.pan.y };
+      return;
+    }
+
+    // Placing a fixed installation: two diagonal corners
+    if (state.addObstacleMode) {
+      if (!state.obstacleDraftStart) {
+        state.obstacleDraftStart = { x, y };
+        state.obstacleDraftEnd = null;
+        state.selectedObstacle = null;
+      } else {
+        addObstacle(
+          state.obstacleActiveType,
+          state.obstacleDraftStart.x,
+          state.obstacleDraftStart.y,
+          x,
+          y,
+        );
+      }
+      renderMeasurePanel();
+      render();
+      return;
+    }
+
+    // Click an existing obstacle to select it
+    const hitOb = hitTestObstacle(x, y);
+    if (hitOb) {
+      state.selectedObstacle = hitOb;
+      state.selectedMeasurement = null;
+      renderMeasurePanel();
+      render();
+      return;
+    }
+
+    // Click an existing measurement to select it
+    const hit = hitTestMeasurement(x, y);
+    if (hit) {
+      state.selectedMeasurement = hit;
+      state.selectedObstacle = null;
+      renderMeasureList();
+      render();
+      return;
+    }
+
+    // Otherwise place a measurement point
+    if (!state.measureDraftStart) {
+      state.measureDraftStart = { x, y };
+      state.measureDraftEnd = null;
+      state.selectedMeasurement = null;
+      state.selectedObstacle = null;
+    } else {
+      addMeasurement(
+        state.measureActiveType,
+        state.measureDraftStart.x,
+        state.measureDraftStart.y,
+        x,
+        y,
+      );
+      state.measureDraftStart = null;
+      state.measureDraftEnd = null;
+    }
+    renderMeasureList();
+    render();
+    return;
+  }
+
   // Handle calibration mode
   if (state.calibrationMode) {
     if (!state.calibrationStart) {
@@ -1985,6 +3300,22 @@ function handleCanvasMouseMove(e) {
     return;
   }
 
+  if (state.measureMode && state.addObstacleMode && state.obstacleDraftStart) {
+    // Live preview of the rectangle while placing a fixed installation
+    const { x, y } = screenToCanvas(e.clientX, e.clientY);
+    state.obstacleDraftEnd = { x, y };
+    render();
+    return;
+  }
+
+  if (state.measureMode && state.measureDraftStart) {
+    // Live preview while placing a measurement
+    const { x, y } = screenToCanvas(e.clientX, e.clientY);
+    state.measureDraftEnd = { x, y };
+    render();
+    return;
+  }
+
   if (state.cropMode && state.cropStart) {
     const { x, y } = screenToCanvas(e.clientX, e.clientY);
     state.cropEnd = { x, y };
@@ -2067,14 +3398,11 @@ function handleCanvasWheel(e) {
 // Update selected furniture panel
 function updateSelectedFurniturePanel() {
   const panel = document.getElementById("selectedFurniturePanel");
-  const furnitureListSection = document.querySelector(".section");
   const seatDepthLabel = document.getElementById("seatDepthLabel");
   const expandedWidthLabel = document.getElementById("expandedWidthLabel");
   const expandedDepthLabel = document.getElementById("expandedDepthLabel");
 
   if (state.selectedFurniture) {
-    panel.style.display = "block";
-    furnitureListSection.style.display = "none";
     document.getElementById("furnitureName").value =
       state.selectedFurniture.name;
     document.getElementById("furnitureWidth").value =
@@ -2105,10 +3433,9 @@ function updateSelectedFurniturePanel() {
       expandedWidthLabel.style.display = "none";
       expandedDepthLabel.style.display = "none";
     }
-  } else {
-    panel.style.display = "none";
-    furnitureListSection.style.display = "block";
   }
+
+  updateSidebarPanels();
 }
 
 // Handle furniture property changes
@@ -2174,10 +3501,24 @@ function handleKeyDown(e) {
     return;
   }
 
-  // Delete key removes selected furniture
+  // Delete key removes the selected measurement, obstacle or furniture
   if (e.key === "Delete" || e.key === "Del") {
-    if (state.selectedFurniture) {
+    if (state.measureMode && state.selectedObstacle) {
+      deleteObstacle(state.selectedObstacle.id);
+    } else if (state.measureMode && state.selectedMeasurement) {
+      deleteMeasurement(state.selectedMeasurement.id);
+    } else if (state.selectedFurniture) {
       deleteFurniture();
+    }
+    return;
+  }
+
+  // Escape cancels a draft (measurement or fixed installation)
+  if (e.key === "Escape") {
+    if (state.measureMode && state.addObstacleMode && state.obstacleDraftStart) {
+      cancelObstacleDraft();
+    } else if (state.measureMode && state.measureDraftStart) {
+      cancelMeasureDraft();
     }
   }
 }
@@ -2189,6 +3530,8 @@ function saveProject() {
     floorPlan: state.floorPlan,
     pixelsPerMeter: state.pixelsPerMeter,
     furniture: state.furniture,
+    measurements: state.measurements,
+    obstacles: state.obstacles,
     snapshotGraph: state.snapshotGraph,
     currentSnapshotId: state.currentSnapshotId,
     lastModified: new Date().toISOString(),
@@ -2263,10 +3606,16 @@ function loadProject() {
 
     state.pixelsPerMeter = project.pixelsPerMeter || null;
     state.furniture = project.furniture || [];
+    state.measurements = project.measurements || [];
+    state.obstacles = project.obstacles || [];
     // Handle both old and new snapshot formats
     state.snapshotGraph = project.snapshotGraph || [];
     state.currentSnapshotId = project.currentSnapshotId || null;
     state.hasUnsavedChanges = false;
+    state.addObstacleMode = false;
+    state.obstacleDraftStart = null;
+    state.obstacleDraftEnd = null;
+    state.selectedObstacle = null;
     updateSnapshotUI();
     renderSnapshotGraph();
   } catch (e) {
@@ -2288,10 +3637,16 @@ function loadProjectByName(projectName) {
   updateProjectNameDisplay();
   state.pixelsPerMeter = project.pixelsPerMeter || null;
   state.furniture = project.furniture || [];
+  state.measurements = project.measurements || [];
+  state.obstacles = project.obstacles || [];
   // Handle both old and new snapshot formats
   state.snapshotGraph = project.snapshotGraph || [];
   state.currentSnapshotId = project.currentSnapshotId || null;
   state.hasUnsavedChanges = false;
+  state.addObstacleMode = false;
+  state.obstacleDraftStart = null;
+  state.obstacleDraftEnd = null;
+  state.selectedObstacle = null;
   updateSnapshotUI();
   renderSnapshotGraph();
 
@@ -2322,6 +3677,19 @@ function closeProject() {
   state.selectedFurniture = null;
   state.pixelsPerMeter = null;
   state.projectName = "Untitled Project";
+  state.measurements = [];
+  state.measureMode = false;
+  state.measureDraftStart = null;
+  state.measureDraftEnd = null;
+  state.selectedMeasurement = null;
+  state.obstacles = [];
+  state.addObstacleMode = false;
+  state.obstacleDraftStart = null;
+  state.obstacleDraftEnd = null;
+  state.selectedObstacle = null;
+  document.getElementById("measureBtn").classList.remove("active");
+  document.getElementById("measureBtn").setAttribute("aria-pressed", "false");
+  canvas.style.cursor = "grab";
   localStorage.removeItem("roomer-current-project");
   showUploadOverlay();
   resizeCanvas();
@@ -2361,6 +3729,8 @@ function exportProject() {
     floorPlan: state.floorPlan,
     pixelsPerMeter: state.pixelsPerMeter,
     furniture: state.furniture,
+    measurements: state.measurements,
+    obstacles: state.obstacles,
     snapshotGraph: state.snapshotGraph,
     currentSnapshotId: state.currentSnapshotId,
     lastModified: new Date().toISOString(),

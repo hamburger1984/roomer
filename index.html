@@ -264,6 +264,90 @@
               </button>
             </form>
           </section>
+
+          <section
+            class="section panel-hidden"
+            id="measurePanel"
+            aria-labelledby="measure-heading"
+          >
+            <h2 id="measure-heading" class="sr-only">Measurement Tool</h2>
+            <h3 class="measure-title">📐 Measurement Tool</h3>
+            <p class="measure-instructions" id="measureInstructions">
+              Pick a type, then click two points on the plan to add a
+              measurement.
+            </p>
+
+            <label class="measure-scale-label" for="measureScale">
+              Scale (px per 1 m):
+              <span class="measure-scale-row">
+                <input
+                  type="number"
+                  id="measureScale"
+                  step="1"
+                  min="1"
+                  aria-label="Drawing scale in pixels per meter"
+                />
+                <span class="measure-scale-unit">px/m</span>
+              </span>
+            </label>
+
+            <div
+              id="measureTypes"
+              class="measure-types"
+              role="group"
+              aria-label="Measurement types"
+            ></div>
+
+            <div id="measureLegend" class="measure-legend"></div>
+
+            <section class="measure-obstacle-block" aria-label="Fixed installations">
+              <h4 class="measure-obstacle-title" id="obstacleHeading">
+                Fixed installations (limit usable space)
+              </h4>
+              <div
+                id="obstacleTypes"
+                class="measure-types"
+                role="group"
+                aria-label="Fixed installation types"
+              ></div>
+              <button
+                id="addObstacleBtn"
+                class="btn measure-btn"
+                aria-label="Add rectangular fixed installation"
+              >
+                ＋ Add fixed installation
+              </button>
+              <div id="obstacleList" class="obstacle-list" role="list"></div>
+            </section>
+
+            <div id="measureStatus" class="measure-status" aria-live="polite"></div>
+
+            <div id="measureList" class="measure-list" role="list"></div>
+
+            <div class="measure-actions">
+              <button
+                id="exportMeasureImage"
+                class="btn measure-btn"
+                aria-label="Export image"
+              >
+                📷 Export PNG
+              </button>
+              <button
+                id="clearMeasurements"
+                class="btn btn-danger measure-btn"
+                aria-label="Clear all measurements"
+              >
+                🗑 Clear
+              </button>
+              <button
+                id="exitMeasureMode"
+                class="btn btn-secondary measure-exit-btn"
+                aria-label="Exit measurement mode"
+              >
+                Done
+              </button>
+            </div>
+          </section>
         </aside>
 
         <!-- Main Canvas Area -->
@@ -344,6 +428,14 @@
               <span id="scaleDisplay" class="scale-info" aria-live="polite"
                 >No Scale</span
               >
+              <button
+                id="measureBtn"
+                class="btn-icon"
+                aria-label="Measurement tool"
+                aria-pressed="false"
+              >
+                📐
+              </button>
               <button
                 id="calibrateBtnSmall"
                 class="btn-icon"
