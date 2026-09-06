@@ -904,12 +904,81 @@ function updateScaleDisplay() {
   }
 }
 
+// ========== THEME (light / dark / auto) ==========
+let currentTheme = "auto";
+
+function getResolvedTheme() {
+  if (currentTheme === "auto") {
+    return window.matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light";
+  }
+  return currentTheme;
+}
+
+function getThemeCanvasColors() {
+  if (getResolvedTheme() === "dark") {
+    return {
+      bg: "#171a1f",
+      hint: "#9aa0a6",
+      grid: { major: "rgba(255, 255, 255, 0.12)", minor: "rgba(255, 255, 255, 0.06)" },
+    };
+  }
+  return {
+    bg: "#f0f0f0",
+    hint: "#999",
+    grid: { major: "rgba(0, 0, 0, 0.10)", minor: "rgba(0, 0, 0, 0.05)" },
+  };
+}
+
+function updateThemeSelector() {
+  const sel = document.getElementById("themeSelector");
+  if (!sel) return;
+  sel.value = currentTheme;
+  if (typeof t === "function") {
+    sel.setAttribute("aria-label", t("ui.themeSelector"));
+    for (const opt of sel.options) {
+      const key = { auto: "themeAuto", light: "themeLight", dark: "themeDark" }[opt.value];
+      if (key) opt.textContent = t(`ui.${key}`);
+    }
+  }
+}
+
+function applyTheme() {
+  document.documentElement.setAttribute("data-theme", getResolvedTheme());
+  updateThemeSelector();
+  render();
+}
+
+function initTheme() {
+  const saved = localStorage.getItem("roomer-theme");
+  if (saved === "auto" || saved === "light" || saved === "dark") {
+    currentTheme = saved;
+  }
+  applyTheme();
+  const mq = window.matchMedia("(prefers-color-scheme: dark)");
+  if (typeof mq.addEventListener === "function") {
+    mq.addEventListener("change", () => {
+      if (currentTheme === "auto") applyTheme();
+    });
+  }
+}
+
+function setTheme(theme) {
+  if (theme !== "auto" && theme !== "light" && theme !== "dark") return;
+  currentTheme = theme;
+  localStorage.setItem("roomer-theme", theme);
+  applyTheme();
+}
+
 // Initialize application
 function init() {
   // Initialize i18n system first
   if (typeof initLanguage === "function") {
     initLanguage();
   }
+  // Initialize theme (light/dark/auto)
+  initTheme();
 
   setupEventListeners();
   renderFurnitureLibrary();
@@ -921,8 +990,9 @@ function init() {
   renderSnapshotGraph();
   updateUndoRedoButtons();
 
-  // Show upload overlay if no floor plan loaded
-  if (!state.floorPlanImage) {
+  // Show upload overlay only if there is no content at all (no floor plan,
+  // no rooms, no furniture) – stored room plans must be visible right away
+  if (!state.floorPlanImage && !state.rooms.length && !state.furniture.length) {
     showUploadOverlay();
   }
 }
@@ -958,6 +1028,9 @@ function updateAllUIText() {
   const roomHeading = document.getElementById("roomHeading");
   if (roomHeading && typeof t === "function") roomHeading.textContent = t("room.title");
 
+  // Translate the theme selector labels
+  updateThemeSelector();
+
   // Update project name if it's still the default
   const defaultNames = ["Untitled Project", "Unbenanntes Projekt"];
   if (defaultNames.includes(state.projectName)) {
@@ -980,6 +1053,17 @@ function setupEventListeners() {
     // Set initial value
     if (typeof currentLanguage !== "undefined") {
       languageSelector.value = currentLanguage;
+    }
+  }
+
+  // Theme switcher
+  const themeSelector = document.getElementById("themeSelector");
+  if (themeSelector) {
+    themeSelector.addEventListener("change", (e) => {
+      setTheme(e.target.value);
+    });
+    if (typeof currentTheme !== "undefined") {
+      themeSelector.value = currentTheme;
     }
   }
 
@@ -1351,19 +1435,21 @@ function updateSidebarPanels() {
 }
 
 // Draw a subtle construction grid (for from-scratch Grundrisse)
-function drawMeasureGrid(targetCtx, t) {
+function drawMeasureGrid(targetCtx, t, gridColors) {
   const ppm = state.pixelsPerMeter || DEFAULT_MEASURE_SCALE;
   const step = (50 / 100) * ppm; // 50 cm grid
   if (step < 8) return;
+  const colors = gridColors || {
+    major: "rgba(0, 0, 0, 0.10)",
+    minor: "rgba(0, 0, 0, 0.05)",
+  };
 
   targetCtx.save();
   targetCtx.lineWidth = 1;
 
   for (let gx = Math.ceil(t.x0 / step) * step; gx <= t.x1; gx += step) {
     targetCtx.strokeStyle =
-      Math.round(gx / step) % 2 === 0
-        ? "rgba(0, 0, 0, 0.10)"
-        : "rgba(0, 0, 0, 0.05)";
+      Math.round(gx / step) % 2 === 0 ? colors.major : colors.minor;
     targetCtx.beginPath();
     targetCtx.moveTo(gx, t.y0);
     targetCtx.lineTo(gx, t.y1);
@@ -1371,9 +1457,7 @@ function drawMeasureGrid(targetCtx, t) {
   }
   for (let gy = Math.ceil(t.y0 / step) * step; gy <= t.y1; gy += step) {
     targetCtx.strokeStyle =
-      Math.round(gy / step) % 2 === 0
-        ? "rgba(0, 0, 0, 0.10)"
-        : "rgba(0, 0, 0, 0.05)";
+      Math.round(gy / step) % 2 === 0 ? colors.major : colors.minor;
     targetCtx.beginPath();
     targetCtx.moveTo(t.x0, gy);
     targetCtx.lineTo(t.x1, gy);
@@ -1503,6 +1587,7 @@ function addRoom(x, y, widthCm, depthCm, ceilingHeightCm) {
     widthCm,
     depthCm,
     ceilingHeightCm: ceilingHeightCm || null,
+    name: "",
     fixtures: [],
   };
   state.rooms.push(room);
@@ -1518,7 +1603,12 @@ function addRoom(x, y, widthCm, depthCm, ceilingHeightCm) {
 
 function addDefaultRoom() {
   const rect = canvas.getBoundingClientRect();
-  const c = screenToCanvas(rect.left + rect.width / 2, rect.top + rect.height / 2);
+  const sbw = sidebarOverlayWidth();
+  const visibleW = Math.max(1, rect.width - sbw);
+  const c = screenToCanvas(
+    rect.left + sbw + visibleW / 2,
+    rect.top + rect.height / 2,
+  );
   const pxScale = roomPxScale();
   return addRoom(
     c.x / pxScale - DEFAULT_ROOM_WIDTH_CM / 2,
@@ -1582,6 +1672,17 @@ function updateRoomField(id, field, value) {
   render();
 }
 
+function renameRoom(id, name) {
+  const r = getRoom(id);
+  if (!r) return;
+  pushUndoState();
+  r.name = (name || "").trim();
+  markChanges();
+  saveProject();
+  renderRoomPanel();
+  render();
+}
+
 function setWallThickness(value) {
   const cm = parseFloat(value);
   if (!Number.isFinite(cm) || cm <= 0) return;
@@ -1603,6 +1704,8 @@ function addFixture(roomId, wall, type) {
   if (type === "door") {
     fx.offsetCm = 0;
     fx.widthCm = Math.min(80, len);
+    fx.hinge = "end";
+    fx.swing = "in";
   } else if (type === "window") {
     fx.offsetCm = 0;
     fx.widthCm = Math.min(120, len);
@@ -1644,6 +1747,24 @@ function deleteFixture(roomId, fiscalId) {
   render();
 }
 
+// Change how a door opens, without moving it: "hinge" = start/end edge of the
+// opening (swings to the left vs right side), "swing" = in/out of the room
+function setDoorOption(roomId, fixtureId, field, value) {
+  const r = getRoom(roomId);
+  if (!r) return;
+  const fx = r.fixtures.find((f) => f.id === fixtureId);
+  if (!fx || fx.type !== "door") return;
+  if (field === "hinge" && value !== "start" && value !== "end") return;
+  if (field === "swing" && value !== "in" && value !== "out") return;
+  if (fx[field] === value) return;
+  pushUndoState();
+  fx[field] = value;
+  markChanges();
+  saveProject();
+  renderRoomPanel();
+  render();
+}
+
 function updateFixtureField(roomId, fiscalId, field, value) {
   const r = getRoom(roomId);
   if (!r) return;
@@ -1679,6 +1800,17 @@ function selectRoom(id) {
 
 // --- Hit testing (world/px space) ---
 
+// Distance from a point (px, py) to the segment (x1,y1)-(x2,y2)
+function distToSegment(px, py, x1, y1, x2, y2) {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq === 0) return Math.hypot(px - x1, py - y1);
+  let t = ((px - x1) * dx + (py - y1) * dy) / lenSq;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy));
+}
+
 function hitTestRooms(x, y) {
   const THRESH = 12;
   for (const r of state.rooms) {
@@ -1705,6 +1837,157 @@ function hitTestRooms(x, y) {
     }
   }
   return null;
+}
+
+// Hit test a fixture's grab zone on the canvas (world px). Returns
+// { room, fx, handle } where handle is the drag kind:
+//   null       -> move the fixture along the wall (or just select a chimney)
+//   "start"    -> resize from the opening's leading edge
+//   "end"      -> resize from the opening's trailing edge
+//   "chimneyW" -> resize chimney width
+//   "chimneyD" -> resize chimney depth
+function hitTestFixture(x, y) {
+  const pxScale = roomPxScale();
+  const grabPx = 14;
+  const grabCm = grabPx / pxScale;
+  for (const r of state.rooms) {
+    for (const fx of r.fixtures) {
+      if (fx.type === "chimney") {
+        const corners = roomCorners(r);
+        const c = corners[fx.corner];
+        if (!c) continue;
+        const cxp = cmToPixels(c.x);
+        const cyp = cmToPixels(c.y);
+        const dirX = fx.corner === "tl" || fx.corner === "bl" ? 1 : -1;
+        const dirY = fx.corner === "tl" || fx.corner === "tr" ? 1 : -1;
+        const w = fx.widthCm * pxScale;
+        const d = fx.depthCm * pxScale;
+        const x0 = dirX > 0 ? cxp : cxp - w;
+        const y0 = dirY > 0 ? cyp : cyp - d;
+        if (distToSegment(x, y, x0 + w, y0, x0 + w, y0 + d) <= grabPx) {
+          return { room: r, fx, handle: "chimneyW" };
+        }
+        if (distToSegment(x, y, x0, y0 + d, x0 + w, y0 + d) <= grabPx) {
+          return { room: r, fx, handle: "chimneyD" };
+        }
+        if (x >= x0 && x <= x0 + w && y >= y0 && y <= y0 + d) {
+          return { room: r, fx, handle: null };
+        }
+        continue;
+      }
+      const seg = roomWallSegment(r, fx.wall);
+      const a = { x: cmToPixels(seg.a.x), y: cmToPixels(seg.a.y) };
+      const b = { x: cmToPixels(seg.b.x), y: cmToPixels(seg.b.y) };
+      const plen = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+      const ux = (b.x - a.x) / plen;
+      const uy = (b.y - a.y) / plen;
+      const n = roomWallNormal(r, fx.wall);
+      // band thickness the fixture can be grabbed on: the wall plus a margin
+      // into the room
+      const band = state.wallThicknessCm / 2 + grabCm;
+      const p1 = { x: a.x + ux * fx.offsetCm * pxScale, y: a.y + uy * fx.offsetCm * pxScale };
+      const p2 = { x: a.x + ux * (fx.offsetCm + fx.widthCm) * pxScale, y: a.y + uy * (fx.offsetCm + fx.widthCm) * pxScale };
+      const relX = x - p1.x;
+      const relY = y - p1.y;
+      const along = (relX * ux + relY * uy) / pxScale;
+      const perp = (relX * n.x + relY * n.y) / pxScale; // >0 outside, <0 into room
+      const openLen = fx.widthCm;
+      if (perp > band + grabCm || perp < -grabCm) continue;
+      if (along < -grabCm || along > openLen + grabCm) continue;
+      // edge handles take priority for resizing
+      const dStart = Math.hypot(x - p1.x, y - p1.y);
+      const dEnd = Math.hypot(x - p2.x, y - p2.y);
+      if (dStart <= grabPx) return { room: r, fx, handle: "start" };
+      if (dEnd <= grabPx) return { room: r, fx, handle: "end" };
+      return { room: r, fx, handle: null };
+    }
+  }
+  return null;
+}
+
+// Start dragging a fixture in the room editor (world-px canvas point)
+function startFixtureDrag(room, fx, handle, canvasPoint) {
+  state.selectedRoomId = room.id;
+  state.selectedFixtureId = fx.id;
+  if (fx.type !== "chimney") state.selectedWall = fx.wall;
+  pushUndoState();
+  const pxScale = roomPxScale();
+  if (fx.type === "chimney") {
+    state.draggingFixture = { roomId: room.id, fixtureId: fx.id, kind: handle };
+    state.fixtureDragStart = null;
+    return;
+  }
+  const seg = roomWallSegment(room, fx.wall);
+  const plen = Math.hypot(seg.b.x - seg.a.x, seg.b.y - seg.a.y) || 1;
+  const ux = (seg.b.x - seg.a.x) / plen;
+  const uy = (seg.b.y - seg.a.y) / plen;
+  const along = (canvasPoint.x / pxScale - seg.a.x) * ux + (canvasPoint.y / pxScale - seg.a.y) * uy;
+  const kind = handle || "move";
+  state.draggingFixture = { roomId: room.id, fixtureId: fx.id, kind };
+  state.fixtureDragStart =
+    kind === "move"
+      ? { grab: fx.offsetCm + fx.widthCm / 2 - along }
+      : { offset: fx.offsetCm, width: fx.widthCm, along };
+}
+
+function moveFixtureDragTo(canvasPoint) {
+  const d = state.draggingFixture;
+  if (!d) return;
+  const r = getRoom(d.roomId);
+  if (!r) return;
+  const fx = r.fixtures.find((f) => f.id === d.fixtureId);
+  if (!fx) return;
+  const pxScale = roomPxScale();
+  if (fx.type === "chimney") {
+    const corners = roomCorners(r);
+    const c = corners[fx.corner];
+    if (!c) return;
+    const dirX = fx.corner === "tl" || fx.corner === "bl" ? 1 : -1;
+    const dirY = fx.corner === "tl" || fx.corner === "tr" ? 1 : -1;
+    const cxp = cmToPixels(c.x);
+    const cyp = cmToPixels(c.y);
+    if (d.kind === "chimneyW") {
+      const wCm = Math.round(((canvasPoint.x - cxp) / pxScale) * dirX);
+      fx.widthCm = Math.min(Math.max(10, wCm), Math.max(10, Math.floor(r.widthCm * 0.9)));
+    } else if (d.kind === "chimneyD") {
+      const dCm = Math.round(((canvasPoint.y - cyp) / pxScale) * dirY);
+      fx.depthCm = Math.min(Math.max(10, dCm), Math.max(10, Math.floor(r.depthCm * 0.9)));
+    }
+    markChanges();
+    render();
+    return;
+  }
+  const seg = roomWallSegment(r, fx.wall);
+  const lenCm = roomWallLength(r, fx.wall);
+  const plen = Math.hypot(seg.b.x - seg.a.x, seg.b.y - seg.a.y) || 1;
+  const ux = (seg.b.x - seg.a.x) / plen;
+  const uy = (seg.b.y - seg.a.y) / plen;
+  const along = (canvasPoint.x / pxScale - seg.a.x) * ux + (canvasPoint.y / pxScale - seg.a.y) * uy;
+  if (d.kind === "move") {
+    let off = along + state.fixtureDragStart.grab - fx.widthCm / 2;
+    fx.offsetCm = Math.round(Math.max(0, Math.min(lenCm - fx.widthCm, off)));
+  } else if (d.kind === "start") {
+    // resize from the leading edge: the trailing edge stays fixed
+    const end = state.fixtureDragStart.offset + state.fixtureDragStart.width;
+    const off = Math.max(0, Math.min(along, end - 10));
+    fx.offsetCm = Math.round(off);
+    fx.widthCm = Math.round(Math.max(10, end - off));
+  } else if (d.kind === "end") {
+    // resize from the trailing edge: the leading edge stays fixed
+    const w = Math.max(10, Math.min(along - state.fixtureDragStart.offset, lenCm - state.fixtureDragStart.offset));
+    fx.widthCm = Math.round(w);
+  }
+  markChanges();
+  render();
+}
+
+function endFixtureDrag() {
+  if (state.draggingFixture) {
+    markChanges();
+    saveProject();
+  }
+  state.draggingFixture = null;
+  state.fixtureDragStart = null;
 }
 
 // --- Drag + snapping (wall thickness between rooms, door-to-door) ---
@@ -1853,6 +2136,19 @@ function drawRoom(r, targetCtx, withDims) {
     targetCtx.restore();
   }
 
+  // Room name label (centered on the room)
+  if (r.name) {
+    const cx = cmToPixels(r.x) + cmToPixels(r.widthCm) / 2;
+    const cy = cmToPixels(r.y) + cmToPixels(r.depthCm) / 2;
+    targetCtx.save();
+    targetCtx.font = "bold 14px sans-serif";
+    targetCtx.textAlign = "center";
+    targetCtx.textBaseline = "middle";
+    targetCtx.fillStyle = "rgba(44,62,80,0.9)";
+    targetCtx.fillText(r.name, cx, cy);
+    targetCtx.restore();
+  }
+
   if (withDims) drawRoomDimensions(r, targetCtx, T, pxScale);
 }
 
@@ -1864,6 +2160,7 @@ function drawRoomWall(r, wall, targetCtx, T, pxScale) {
   const plen = Math.hypot(b.x - a.x, b.y - a.y) || 1;
   const ux = (b.x - a.x) / plen;
   const uy = (b.y - a.y) / plen;
+  const n = roomWallNormal(r, wall);
   const openings = r.fixtures.filter(
     (f) => f.wall === wall && (f.type === "door" || f.type === "window"),
   );
@@ -1872,6 +2169,11 @@ function drawRoomWall(r, wall, targetCtx, T, pxScale) {
   targetCtx.lineCap = "butt";
   targetCtx.lineWidth = T;
   targetCtx.strokeStyle = ROOM_WALL_COLOR;
+
+  // The wall band is drawn OUTSIDE the measured (interior) area: its interior
+  // face lies on the room boundary, and the band extends outward from there.
+  const shX = n.x * (T / 2);
+  const shY = n.y * (T / 2);
 
   // Wall segments excluding openings
   const pts = [0];
@@ -1882,12 +2184,12 @@ function drawRoomWall(r, wall, targetCtx, T, pxScale) {
     const e = Math.min(lenCm, pts[i + 1]);
     if (e - s < 0.1) continue;
     targetCtx.beginPath();
-    targetCtx.moveTo(a.x + ux * s * pxScale, a.y + uy * s * pxScale);
-    targetCtx.lineTo(a.x + ux * e * pxScale, a.y + uy * e * pxScale);
+    targetCtx.moveTo(a.x + ux * s * pxScale + shX, a.y + uy * s * pxScale + shY);
+    targetCtx.lineTo(a.x + ux * e * pxScale + shX, a.y + uy * e * pxScale + shY);
     targetCtx.stroke();
   }
 
-  // Interior face line (thin reveal) including openings
+  // Interior face line (thin reveal) including openings, on the room boundary
   targetCtx.lineWidth = 1.2;
   targetCtx.strokeStyle = "rgba(255,255,255,0.85)";
   targetCtx.beginPath();
@@ -1969,21 +2271,31 @@ function drawFixture(r, fx, targetCtx, pxScale) {
       );
     }
   } else if (fx.type === "door") {
-    // hinge at p2, leaf swings into the room across the opening
+    // Door leaf + swing arc on the SAME side of the wall. The hinge sits on the
+    // trailing ("end") or leading ("start") edge of the opening, and the door
+    // swings into the room ("in") or out of it ("out"). The arc runs from the
+    // closed position (across the opening, along the wall) to the open position
+    // (perpendicular to the wall), always on the swing side.
     const leafLen = o2 - o1;
-    const hinge = p2;
-    const leafEnd = { x: hinge.x - n.x * leafLen, y: hinge.y - n.y * leafLen };
+    const hinge = fx.hinge === "start" ? p1 : p2;
+    const openDirX = fx.swing === "out" ? n.x : -n.x;
+    const openDirY = fx.swing === "out" ? n.y : -n.y;
+    const leafEnd = { x: hinge.x + openDirX * leafLen, y: hinge.y + openDirY * leafLen };
     targetCtx.strokeStyle = color;
     targetCtx.lineWidth = 2;
     targetCtx.beginPath();
     targetCtx.moveTo(hinge.x, hinge.y);
     targetCtx.lineTo(leafEnd.x, leafEnd.y);
     targetCtx.stroke();
-    // swing arc
+    // swing arc from the closed door position to the open door position
     targetCtx.lineWidth = 1;
-    const ang = Math.atan2(n.y, n.x);
+    const closeX = hinge === p2 ? -ux : ux;
+    const closeY = hinge === p2 ? -uy : uy;
+    const startAng = Math.atan2(closeY, closeX);
+    const openAng = Math.atan2(openDirY, openDirX);
+    const delta = Math.atan2(Math.sin(openAng - startAng), Math.cos(openAng - startAng));
     targetCtx.beginPath();
-    targetCtx.arc(hinge.x, hinge.y, leafLen, ang - Math.PI / 2, ang);
+    targetCtx.arc(hinge.x, hinge.y, leafLen, startAng, startAng + delta, delta < 0);
     targetCtx.stroke();
   } else if (fx.type === "heater") {
     const dp = fx.depthCm * pxScale || cmToPixels(30);
@@ -2013,6 +2325,20 @@ function drawFixture(r, fx, targetCtx, pxScale) {
       targetCtx.stroke();
     }
     targetCtx.restore();
+  }
+
+  // Resize handles at the opening's two edges for the selected fixture
+  if (selected && (fx.type === "door" || fx.type === "window" || fx.type === "heater")) {
+    const hr = 4;
+    targetCtx.fillStyle = "#fff";
+    targetCtx.strokeStyle = "#FF1493";
+    targetCtx.lineWidth = 1.5;
+    for (const hp of [p1, p2]) {
+      targetCtx.beginPath();
+      targetCtx.arc(hp.x, hp.y, hr, 0, Math.PI * 2);
+      targetCtx.fill();
+      targetCtx.stroke();
+    }
   }
   targetCtx.restore();
 }
@@ -2053,6 +2379,23 @@ function drawChimney(r, fx, targetCtx, pxScale) {
   targetCtx.textAlign = "center";
   targetCtx.textBaseline = "middle";
   targetCtx.fillText(`${fx.widthCm} × ${fx.depthCm} cm`, x0 + w / 2, y0 + d / 2);
+  // resize handles on the two free faces
+  if (fx.id === state.selectedFixtureId) {
+    const hr = 4;
+    targetCtx.fillStyle = "#fff";
+    targetCtx.strokeStyle = "#FF1493";
+    targetCtx.lineWidth = 1.5;
+    // width handle (face parallel to the y axis, changes widthCm)
+    targetCtx.beginPath();
+    targetCtx.arc(x0 + w, y0 + d / 2, hr, 0, Math.PI * 2);
+    targetCtx.fill();
+    targetCtx.stroke();
+    // depth handle (face parallel to the x axis, changes depthCm)
+    targetCtx.beginPath();
+    targetCtx.arc(x0 + w / 2, y0 + d, hr, 0, Math.PI * 2);
+    targetCtx.fill();
+    targetCtx.stroke();
+  }
   targetCtx.restore();
 }
 
@@ -2064,14 +2407,39 @@ function drawRoomDimensions(r, targetCtx, T, pxScale) {
     const a = { x: cmToPixels(seg.a.x), y: cmToPixels(seg.a.y) };
     const b = { x: cmToPixels(seg.b.x), y: cmToPixels(seg.b.y) };
     const n = roomWallNormal(r, wall);
-    const off = T / 2 + 16;
+    const off = T + 16; // clear of the wall band, which now lies fully outside
     const outA = { x: a.x + n.x * off, y: a.y + n.y * off };
     const outB = { x: b.x + n.x * off, y: b.y + n.y * off };
     const label = formatLength(roomWallLength(r, wall));
     drawRoomDim(targetCtx, outA.x, outA.y, outB.x, outB.y, label, "#7f8c8d");
   }
   r.fixtures.forEach((fx) => {
-    if (fx.type === "chimney") return;
+    const color = ROOM_COLORS[fx.type] || "#7f8c8d";
+    if (fx.type === "chimney") {
+      // corner dims: width along the room face, depth along the other edge
+      const corners = roomCorners(r);
+      const c = corners[fx.corner];
+      if (!c) return;
+      const cxp = cmToPixels(c.x);
+      const cyp = cmToPixels(c.y);
+      const dirX = fx.corner === "tl" || fx.corner === "bl" ? 1 : -1;
+      const dirY = fx.corner === "tl" || fx.corner === "tr" ? 1 : -1;
+      const w = fx.widthCm * pxScale;
+      const d = fx.depthCm * pxScale;
+      const x0 = dirX > 0 ? cxp : cxp - w;
+      const y0 = dirY > 0 ? cyp : cyp - d;
+      const x1 = x0 + w;
+      const y1 = y0 + d;
+      drawRoomDim(
+        targetCtx, x0, y0 + dirY * 10, x1, y0 + dirY * 10,
+        formatLength(fx.widthCm), color, 6,
+      );
+      drawRoomDim(
+        targetCtx, x0 + dirX * 10, y0, x0 + dirX * 10, y1,
+        formatLength(fx.depthCm), color, 6,
+      );
+      return;
+    }
     const seg = roomWallSegment(r, fx.wall);
     const a = { x: cmToPixels(seg.a.x), y: cmToPixels(seg.a.y) };
     const b = { x: cmToPixels(seg.b.x), y: cmToPixels(seg.b.y) };
@@ -2080,30 +2448,62 @@ function drawRoomDimensions(r, targetCtx, T, pxScale) {
     const ux = (b.x - a.x) / plen;
     const uy = (b.y - a.y) / plen;
     const n = roomWallNormal(r, fx.wall);
-    const color = ROOM_COLORS[fx.type] || "#7f8c8d";
     const p1 = { x: a.x + ux * fx.offsetCm * pxScale, y: a.y + uy * fx.offsetCm * pxScale };
     const p2 = {
       x: a.x + ux * (fx.offsetCm + fx.widthCm) * pxScale,
       y: a.y + uy * (fx.offsetCm + fx.widthCm) * pxScale,
     };
-    // dim from wall start to opening start, just inside the wall
-    const inA = { x: a.x - n.x * (T / 2 + 8), y: a.y - n.y * (T / 2 + 8) };
-    const inB = { x: p1.x - n.x * (T / 2 + 8), y: p1.y - n.y * (T / 2 + 8) };
-    drawRoomDim(targetCtx, inA.x, inA.y, inB.x, inB.y, formatLength(fx.offsetCm), color, 6);
-    // width across the opening
-    const wx = -uy;
-    const wy = ux;
+    // three dims on the inside, staggered: left gap / opening width / right gap
+    const in1 = T / 2 + 8;
+    const inW = T / 2 + 12;
+    const in2 = T / 2 + 22;
+    const a1 = { x: a.x - n.x * in1, y: a.y - n.y * in1 };
+    const p1d = { x: p1.x - n.x * in1, y: p1.y - n.y * in1 };
+    const pW1 = { x: p1.x - n.x * inW, y: p1.y - n.y * inW };
+    const pW2 = { x: p2.x - n.x * inW, y: p2.y - n.y * inW };
+    const p2d = { x: p2.x - n.x * in2, y: p2.y - n.y * in2 };
+    const b2 = { x: b.x - n.x * in2, y: b.y - n.y * in2 };
+    drawRoomDim(targetCtx, a1.x, a1.y, p1d.x, p1d.y, formatLength(fx.offsetCm), color, 6);
+    drawRoomDim(targetCtx, pW1.x, pW1.y, pW2.x, pW2.y, formatLength(fx.widthCm), color, 5);
     drawRoomDim(
-      targetCtx,
-      p1.x + wx * 7,
-      p1.y + wy * 7,
-      p2.x + wx * 7,
-      p2.y + wy * 7,
-      formatLength(fx.widthCm),
-      color,
-      5,
+      targetCtx, p2d.x, p2d.y, b2.x, b2.y,
+      formatLength(Math.max(0, Math.round(lenCm - fx.offsetCm - fx.widthCm))), color, 6,
     );
   });
+
+  // While a fixture is being dragged, also show the gaps to its neighbours
+  // along the same wall
+  if (state.draggingFixture) {
+    const dgRoom = getRoom(state.draggingFixture.roomId);
+    const dgFx = dgRoom && dgRoom.fixtures.find((f) => f.id === state.draggingFixture.fixtureId);
+    if (dgRoom && dgFx && dgFx.type !== "chimney") {
+      const sameWall = dgRoom.fixtures
+        .filter((f) => f.type !== "chimney" && f.wall === dgFx.wall)
+        .sort((x, y) => x.offsetCm - y.offsetCm);
+      const inG = T / 2 + 32;
+      const seg = roomWallSegment(dgRoom, dgFx.wall);
+      const ga = { x: cmToPixels(seg.a.x), y: cmToPixels(seg.a.y) };
+      const gb = { x: cmToPixels(seg.b.x), y: cmToPixels(seg.b.y) };
+      const gplen = Math.hypot(gb.x - ga.x, gb.y - ga.y) || 1;
+      const gux = (gb.x - ga.x) / gplen;
+      const guy = (gb.y - ga.y) / gplen;
+      const gn = roomWallNormal(dgRoom, dgFx.wall);
+      const gx = (t) => ga.x + gux * t * pxScale - gn.x * inG;
+      const gy = (t) => ga.y + guy * t * pxScale - gn.y * inG;
+      for (let i = 0; i < sameWall.length - 1; i++) {
+        const l = sameWall[i];
+        const rr = sameWall[i + 1];
+        const gap = rr.offsetCm - (l.offsetCm + l.widthCm);
+        if (gap <= 0) continue;
+        drawRoomDim(
+          targetCtx, gx(l.offsetCm + l.widthCm), gy(l.offsetCm + l.widthCm),
+          gx(rr.offsetCm), gy(rr.offsetCm),
+          formatLength(Math.round(gap)), "#95a5a6", 6,
+        );
+      }
+    }
+  }
+
   targetCtx.restore();
 }
 
@@ -2158,6 +2558,14 @@ function fitRoomView() {
 
 // --- Panel rendering ---
 
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 function renderRoomPanel() {
   const panel = document.getElementById("roomPanel");
   if (!panel) return;
@@ -2183,7 +2591,7 @@ function renderRoomList() {
       return `
       <div class="room-card${selected}" data-roomid="${r.id}" role="listitem">
         <div class="room-card-head">
-          <span class="room-card-name">${t("room.cardName", { n: i + 1 })}</span>
+          <input type="text" class="room-card-name" data-roomname="${r.id}" value="${escapeHtml(r.name || "")}" placeholder="${t("room.cardName", { n: i + 1 })}" aria-label="${t("room.roomName")}" />
           <button class="obstacle-del-btn" data-delroom="${r.id}" aria-label="${t("room.delete")}">🗑</button>
         </div>
         <div class="room-card-inputs">
@@ -2211,6 +2619,11 @@ function renderRoomList() {
   list.querySelectorAll("[data-roomfield]").forEach((inp) => {
     inp.addEventListener("change", () => {
       updateRoomField(inp.getAttribute("data-id"), inp.getAttribute("data-roomfield"), inp.value);
+    });
+  });
+  list.querySelectorAll("[data-roomname]").forEach((inp) => {
+    inp.addEventListener("change", () => {
+      renameRoom(inp.getAttribute("data-roomname"), inp.value);
     });
   });
 }
@@ -2297,6 +2710,24 @@ function renderFixtureList() {
       } else {
         controls.push(`<label>${t("room.offset")} <input type="number" step="1" min="0" max="${wallLen}" value="${Math.round(fx.offsetCm)}" data-fixturefield="offset" data-id="${fx.id}" /></label>`);
         controls.push(`<label>${t("room.width")} <input type="number" step="1" min="1" max="${wallLen}" value="${Math.round(fx.widthCm)}" data-fixturefield="width" data-id="${fx.id}" /></label>`);
+        if (fx.type === "door") {
+          const compass = {
+            top: { start: "Left", end: "Right" },
+            right: { start: "Top", end: "Bottom" },
+            bottom: { start: "Right", end: "Left" },
+            left: { start: "Bottom", end: "Top" },
+          }[fx.wall] || { start: "Left", end: "Right" };
+          const hingeOpts = [
+            `<option value="end"${fx.hinge !== "start" ? " selected" : ""}>${t("room.opensTo")} ${t("room.wall" + compass.end)}</option>`,
+            `<option value="start"${fx.hinge === "start" ? " selected" : ""}>${t("room.opensTo")} ${t("room.wall" + compass.start)}</option>`,
+          ].join("");
+          const swingOpts = [
+            `<option value="in"${fx.swing !== "out" ? " selected" : ""}>${t("room.swingIn")}</option>`,
+            `<option value="out"${fx.swing === "out" ? " selected" : ""}>${t("room.swingOut")}</option>`,
+          ].join("");
+          controls.push(`<label>${t("room.direction")} <select data-dooropt="hinge" data-id="${fx.id}">${hingeOpts}</select></label>`);
+          controls.push(`<label>${t("room.swing")} <select data-dooropt="swing" data-id="${fx.id}">${swingOpts}</select></label>`);
+        }
         if (fx.type === "heater") {
           controls.push(`<label>${t("room.depth")} <input type="number" step="1" min="1" value="${Math.round(fx.depthCm)}" data-fixturefield="depth" data-id="${fx.id}" /></label>`);
         }
@@ -2336,6 +2767,11 @@ function renderFixtureList() {
       updateFixtureField(r.id, inp.getAttribute("data-id"), inp.getAttribute("data-fixturefield"), inp.value);
     });
   });
+  list.querySelectorAll("[data-dooropt]").forEach((sel) => {
+    sel.addEventListener("change", () => {
+      setDoorOption(r.id, sel.getAttribute("data-id"), sel.getAttribute("data-dooropt"), sel.value);
+    });
+  });
 }
 
 // Export the floor plan + rooms as a PNG image
@@ -2352,11 +2788,13 @@ function exportMeasurementImage() {
   let by2 = -Infinity;
   if (state.rooms.length) {
     const ex = (state.pixelsPerMeter || DEFAULT_MEASURE_SCALE) / 100;
+    // include the wall band, which extends the wall thickness OUTSIDE the room
+    const wt = state.wallThicknessCm * ex;
     state.rooms.forEach((r) => {
-      bx1 = Math.min(bx1, r.x * ex);
-      by1 = Math.min(by1, r.y * ex);
-      bx2 = Math.max(bx2, (r.x + r.widthCm) * ex);
-      by2 = Math.max(by2, (r.y + r.depthCm) * ex);
+      bx1 = Math.min(bx1, r.x * ex - wt);
+      by1 = Math.min(by1, r.y * ex - wt);
+      bx2 = Math.max(bx2, (r.x + r.widthCm) * ex + wt);
+      by2 = Math.max(by2, (r.y + r.depthCm) * ex + wt);
     });
   }
   if (hasPlan) {
@@ -2624,17 +3062,22 @@ function resizeCanvas() {
   canvas.width = wrapper.clientWidth;
   canvas.height = wrapper.clientHeight;
 
-  // If we have a floor plan, fit it to view (which also calls render)
+  // Fit the plan (or the rooms) to the view, which also renders
   if (state.floorPlanImage) {
     fitToView();
+  } else if (state.rooms.length) {
+    fitRoomsToView();
   } else {
     render();
   }
 }
 
-// Fit floor plan to viewport
+// Fit floor plan to viewport (or room content for rooms-only projects)
 function fitToView() {
-  if (!state.floorPlanImage) return;
+  if (!state.floorPlanImage) {
+    fitRoomsToView();
+    return;
+  }
 
   const wrapper = document.getElementById("canvasWrapper");
   const wrapperWidth = wrapper.clientWidth;
@@ -2651,6 +3094,61 @@ function fitToView() {
   // Center the image
   state.pan.x = (wrapperWidth - imageWidth * state.zoom) / 2;
   state.pan.y = (wrapperHeight - imageHeight * state.zoom) / 2;
+
+  document.getElementById("zoomLevel").textContent =
+    Math.round(state.zoom * 100) + "%";
+  render();
+}
+
+// Width of the canvas hidden behind the pinned sidebar (px) so content can be
+// centered in the actually visible area
+function sidebarOverlayWidth() {
+  if (state.sidebarPinned) {
+    const sidebar = document.getElementById("sidebar");
+    if (sidebar) return 320;
+  }
+  return 0;
+}
+
+// Center and zoom the room footprints to fill the visible canvas area
+function fitRoomsToView() {
+  const rect = canvas.getBoundingClientRect();
+  const w = rect.width || 1;
+  const h = rect.height || 1;
+
+  if (!state.rooms.length) {
+    state.zoom = 1;
+    state.pan = { x: 0, y: 0 };
+    document.getElementById("zoomLevel").textContent = "100%";
+    render();
+    return;
+  }
+
+  const sbw = sidebarOverlayWidth();
+  const visibleW = Math.max(1, w - sbw);
+
+  const padCm = 60;
+  let x0 = Infinity,
+    y0 = Infinity,
+    x1 = -Infinity,
+    y1 = -Infinity;
+  for (const r of state.rooms) {
+    x0 = Math.min(x0, cmToPixels(r.x) - cmToPixels(padCm));
+    y0 = Math.min(y0, cmToPixels(r.y) - cmToPixels(padCm));
+    x1 = Math.max(x1, cmToPixels(r.x + r.widthCm) + cmToPixels(padCm));
+    y1 = Math.max(y1, cmToPixels(r.y + r.depthCm) + cmToPixels(padCm));
+  }
+  const contentW = Math.max(1, x1 - x0);
+  const contentH = Math.max(1, y1 - y0);
+
+  const zoom = Math.min((visibleW * 0.9) / contentW, (h * 0.9) / contentH, 2);
+  state.zoom = Math.max(0.1, zoom);
+
+  // Center the content in the visible area (right of the pinned sidebar)
+  const vcX = sbw + visibleW / 2;
+  const vcY = h / 2;
+  state.pan.x = vcX - ((x0 + x1) / 2) * state.zoom;
+  state.pan.y = vcY - ((y0 + y1) / 2) * state.zoom;
 
   document.getElementById("zoomLevel").textContent =
     Math.round(state.zoom * 100) + "%";
@@ -2751,21 +3249,26 @@ function render() {
   if (state.floorPlanImage) {
     ctx.drawImage(state.floorPlanImage, 0, 0);
   } else {
-    ctx.fillStyle = "#f0f0f0";
+    const themeColors = getThemeCanvasColors();
+    ctx.fillStyle = themeColors.bg;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     if (state.roomEditorMode) {
       // Show a construction grid for from-scratch Grundrisse
-      drawMeasureGrid(ctx, {
-        s: 1,
-        ox: 0,
-        oy: 0,
-        x0: -2000,
-        y0: -2000,
-        x1: 20000,
-        y1: 20000,
-      });
+      drawMeasureGrid(
+        ctx,
+        {
+          s: 1,
+          ox: 0,
+          oy: 0,
+          x0: -2000,
+          y0: -2000,
+          x1: 20000,
+          y1: 20000,
+        },
+        themeColors.grid
+      );
     } else {
-      ctx.fillStyle = "#999";
+      ctx.fillStyle = themeColors.hint;
       ctx.font = "20px sans-serif";
       ctx.textAlign = "center";
       ctx.fillText("Grundriss hochladen", canvas.width / 2, canvas.height / 2);
@@ -3112,6 +3615,24 @@ function handleCanvasMouseDown(e) {
       return;
     }
 
+    // Fixtures (doors, windows, heaters, chimney corner) get dragged/resized
+    const fxHit = hitTestFixture(x, y);
+    if (fxHit) {
+      if (fxHit.fx.type === "chimney" && !fxHit.handle) {
+        // plain click inside a selected chimney just selects it
+        state.selectedRoomId = fxHit.room.id;
+        state.selectedFixtureId = fxHit.fx.id;
+        renderRoomPanel();
+        render();
+      } else {
+        startFixtureDrag(fxHit.room, fxHit.fx, fxHit.handle, { x, y });
+        canvas.style.cursor = "grabbing";
+        renderRoomPanel();
+        render();
+      }
+      return;
+    }
+
     const hit = hitTestRooms(x, y);
     if (hit) {
       const r = hit.room;
@@ -3132,6 +3653,9 @@ function handleCanvasMouseDown(e) {
       state.selectedFixtureId = null;
       renderRoomPanel();
       render();
+      // Left-drag on empty canvas pans the view (like furniture mode)
+      state.isPanning = true;
+      state.panStart = { x: e.clientX - state.pan.x, y: e.clientY - state.pan.y };
     }
     return;
   }
@@ -3253,6 +3777,13 @@ function handleCanvasMouseMove(e) {
     return;
   }
 
+  if (state.roomEditorMode && state.draggingFixture) {
+    // Move/resize a fixture (door, window, heater, chimney) along its wall
+    const { x, y } = screenToCanvas(e.clientX, e.clientY);
+    moveFixtureDragTo({ x, y });
+    return;
+  }
+
   if (state.roomEditorMode && state.draggingRoomId) {
     // Move the room with wall-thickness + door snapping
     const { x, y } = screenToCanvas(e.clientX, e.clientY);
@@ -3312,6 +3843,10 @@ function handleCanvasMouseUp() {
   }
   if (state.draggingRoomId) {
     endRoomDrag();
+    renderRoomPanel();
+  }
+  if (state.draggingFixture) {
+    endFixtureDrag();
     renderRoomPanel();
   }
 }
@@ -3567,6 +4102,9 @@ function loadProject() {
     state.selectedFixtureId = null;
     updateSnapshotUI();
     renderSnapshotGraph();
+
+    // Room plans open directly in the room editor (and hide the overlay)
+    if (state.rooms.length) startRoomEditorMode();
   } catch (e) {
     console.error("Error loading project:", e);
     alert(t("messages.projectLoadError", { error: e.message }));
@@ -3616,6 +4154,17 @@ function loadProjectByName(projectName) {
   }
 
   localStorage.setItem("roomer-current-project", JSON.stringify(project));
+
+  // Show the restored plan immediately: hide the overlay, size the canvas and
+  // open the room editor whenever rooms exist
+  hideUploadOverlay();
+  resizeCanvas();
+  if (state.rooms.length) {
+    startRoomEditorMode();
+  } else {
+    render();
+    updateScaleDisplay();
+  }
 }
 
 // Close project (no confirmation needed as we auto-save)

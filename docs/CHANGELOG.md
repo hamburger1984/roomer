@@ -1,5 +1,52 @@
 # Changelog
 
+## Version 1.13 - Light/Dark/Auto Theme (September 2026)
+
+### Added
+- **Theme selector** in the header with three modes:
+  - **Auto** - follows the OS setting (`prefers-color-scheme`)
+  - **Light** and **Dark** - force a theme regardless of the OS
+  - The choice is saved in `localStorage` and applied before first paint (no flash
+    of the wrong theme); the canvas blank background and construction grid follow
+    the theme too
+- Dark-theme styling for the whole UI (sidebar, panels, buttons, forms, room/furniture
+  cards, upload overlay, floating controls) via theme tokens and `[data-theme]` overrides
+- **Room plans are stored and restored**: rooms-only / blank projects open directly in
+  the room editor when re-opened (or opened from the saved-project list) instead of being
+  hidden behind the "create new project" overlay
+- **Door opening direction**: every door has controls to flip how it opens — the
+  door stays on its wall, only the opening changes: hinge on the trailing/leading
+  edge of the opening (a top-wall door opens to the left or right, a right-wall
+  door to the top or bottom, etc.) and swing *into* the room or *out* of it. The
+  leaf and swing arc always sit on the same side of the wall (arc runs from the
+  closed position to the open position)
+- **Room naming**: each room card has an editable name field (empty = auto "Room n"),
+  and custom names are drawn centered on the room and included in PNG exports
+- **Walls drawn outside the measured area**: the wall band now extends outward from the
+  room boundary instead of being centered on it, so the interior (measured) dimensions
+  are not eaten into by the wall thickness; the plan export also grows to include the
+  full wall thickness
+- **More measurements on the drawing**: every door, window and heater shows three dims
+  inside the room — left gap / opening width / right gap — and chimney corners show
+  width and depth dims, in addition to the wall length labels
+- **Drag fixtures on the drawing**: doors, windows and heaters can be moved along their
+  wall and resized by grabbing the two edge handles; chimney corners resize via width
+  and depth handles. While dragging, the measurements update live and the gaps to the
+  neighboring openings on the same wall are shown
+
+### Fixed
+- **Room dragging was broken**: the room hit test used `distToSegment`, which was
+  accidentally removed with the measurement tool in v1.12. Rooms can be grabbed and
+  moved again (wall-thickness + door snapping intact)
+- **Panning the canvas** now works by left-dragging on empty space in the room editor
+  (previously only middle-mouse/Shift did, and the missing `distToSegment` threw before
+  any drag could even start)
+- **Small plan area**: a rooms-only / blank project is now auto-fitted ("fit content")
+  on load and resize, centered in the *visible* canvas area right of the pinned sidebar
+  instead of half-hidden behind it; the default room is also placed in that visible area.
+  The Reset view button now works for room plans too (it was a no-op without a floor
+  plan image)
+
 ## Version 1.12 - Remove Measurement Tool (September 2026)
 
 ### Removed

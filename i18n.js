@@ -64,6 +64,12 @@ const TRANSLATIONS = {
       importProject: "Import",
       createSnapshot: "Snapshot",
 
+      // Theme
+      themeSelector: "Select theme",
+      themeAuto: "Auto",
+      themeLight: "☀️ Light",
+      themeDark: "🌙 Dark",
+
       // Buttons
       upload: "Upload",
       apply: "Apply",
@@ -283,6 +289,12 @@ const TRANSLATIONS = {
       fixtureChimney: "Chimney",
       offset: "Offset (cm)",
       board: "Board (cm)",
+      direction: "Direction",
+      opensTo: "Opens to the",
+      swing: "Swing",
+      swingIn: "Into the room",
+      swingOut: "Out of the room",
+      roomName: "Room name",
     },
   },
 
@@ -347,6 +359,12 @@ const TRANSLATIONS = {
       exportProject: "Exportieren",
       importProject: "Importieren",
       createSnapshot: "Snapshot",
+
+      // Theme
+      themeSelector: "Design wählen",
+      themeAuto: "Auto",
+      themeLight: "☀️ Hell",
+      themeDark: "🌙 Dunkel",
 
       // Buttons
       upload: "Hochladen",
@@ -569,6 +587,12 @@ const TRANSLATIONS = {
       fixtureChimney: "Kamin",
       offset: "Abstand (cm)",
       board: "Fensterbrett (cm)",
+      direction: "Richtung",
+      opensTo: "Öffnet nach",
+      swing: "Öffnung",
+      swingIn: "in den Raum",
+      swingOut: "aus dem Raum",
+      roomName: "Raumname",
     },
   },
 };
