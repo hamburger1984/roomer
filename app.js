@@ -1710,6 +1710,7 @@ function addFixture(roomId, wall, type) {
     fx.offsetCm = 0;
     fx.widthCm = Math.min(120, len);
     fx.boardDepthCm = 20;
+    fx.boardOverlapCm = 3;
   } else if (type === "heater") {
     fx.offsetCm = 0;
     fx.widthCm = Math.min(90, len);
@@ -1790,7 +1791,17 @@ function updateFixtureField(roomId, fiscalId, field, value) {
   const fx = r.fixtures.find((f) => f.id === fiscalId);
   if (!fx) return;
   const cm = parseFloat(value);
-  if (!Number.isFinite(cm) || cm <= 0) return;
+  if (!Number.isFinite(cm)) return;
+  if (field === "boardOverlap") {
+    if (cm < 0) return;
+    fx.boardOverlapCm = cm;
+    markChanges();
+    saveProject();
+    renderRoomPanel();
+    render();
+    return;
+  }
+  if (cm <= 0) return;
   if (field === "width") fx.widthCm = cm;
   else if (field === "offset") fx.offsetCm = cm;
   else if (field === "depth") fx.depthCm = cm;
@@ -1928,7 +1939,9 @@ function hitTestFixture(x, y) {
       const along = (relX * ux + relY * uy) / pxScale;
       const perp = (relX * n.x + relY * n.y) / pxScale; // >0 outside, <0 into room
       const openLen = fx.widthCm;
-      if (along < -grabCm || along > openLen + grabCm) continue;
+      // window boards stick out past both jambs, so selectable area grows too
+      const extra = fx.type === "window" ? (fx.boardOverlapCm != null ? fx.boardOverlapCm : 3) : 0;
+      if (along < -grabCm - extra || along > openLen + grabCm + extra) continue;
       // edge handles take priority for resizing
       const dStart = Math.hypot(x - p1.x, y - p1.y);
       const dEnd = Math.hypot(x - p2.x, y - p2.y);
@@ -2290,17 +2303,21 @@ function drawFixture(r, fx, targetCtx, pxScale) {
       targetCtx.lineTo(g.x + nwx * 4, g.y + nwy * 4);
       targetCtx.stroke();
     }
-    // window board (ledge protruding into the room)
+    // window board (ledge protruding into the room, slightly wider than the
+    // window: extends boardOverlapCm past each jamb, symmetric on both sides)
     if (fx.boardDepthCm > 0) {
       const bd = fx.boardDepthCm * pxScale;
+      const ov = (fx.boardOverlapCm != null ? fx.boardOverlapCm : 3) * pxScale;
+      const bp1 = { x: p1.x - ux * ov, y: p1.y - uy * ov };
+      const bp2 = { x: p2.x + ux * ov, y: p2.y + uy * ov };
       targetCtx.fillStyle = "rgba(243,156,18,0.28)";
       targetCtx.strokeStyle = "rgba(243,156,18,0.6)";
       targetCtx.lineWidth = 1;
       targetCtx.beginPath();
-      targetCtx.moveTo(p1.x, p1.y);
-      targetCtx.lineTo(p1.x - n.x * bd, p1.y - n.y * bd);
-      targetCtx.lineTo(p2.x - n.x * bd, p2.y - n.y * bd);
-      targetCtx.lineTo(p2.x, p2.y);
+      targetCtx.moveTo(bp1.x, bp1.y);
+      targetCtx.lineTo(bp1.x - n.x * bd, bp1.y - n.y * bd);
+      targetCtx.lineTo(bp2.x - n.x * bd, bp2.y - n.y * bd);
+      targetCtx.lineTo(bp2.x, bp2.y);
       targetCtx.closePath();
       targetCtx.fill();
       targetCtx.stroke();
@@ -2906,6 +2923,7 @@ function renderFixtureList() {
         }
         if (fx.type === "window" && fx.boardDepthCm != null) {
           controls.push(`<label>${t("room.board")} <input type="number" step="1" min="0" value="${Math.round(fx.boardDepthCm)}" data-fixturefield="board" data-id="${fx.id}" /></label>`);
+          controls.push(`<label>${t("room.boardOverlap")} <input type="number" step="1" min="0" value="${Math.round(fx.boardOverlapCm != null ? fx.boardOverlapCm : 3)}" data-fixturefield="boardOverlap" data-id="${fx.id}" /></label>`);
         }
       }
       const wallTag = fx.wall === "corner" ? t("room.corner" + { tl: "Tl", tr: "Tr", br: "Br", bl: "Bl" }[fx.corner]) : t("room.wall" + { top: "Top", right: "Right", bottom: "Bottom", left: "Left" }[fx.wall]);

@@ -47,6 +47,9 @@
   from the corner plus the gap to the next fixture (or the remaining wall length when the
   wall is empty). Room mode also shows the gap between each pair of consecutive openings
   on a wall
+- **Window board overlap**: the window ledge extends a configurable "Board overlap (cm)"
+  beyond the window on both sides (symmetric); the ledge stays selectable over the full
+  overhang. Defaults to 3 cm
 
 ### Fixed
 - **Chimney hatch fill** is clipped to the chimney block — the diagonal hatching no
