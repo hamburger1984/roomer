@@ -55,7 +55,10 @@
   the rooms share, using the average width of the two doors (the wall reveals and
   measurements follow), so the pair reads as one clean centered doorway instead of two
   doors sitting side by side. Selecting either room of the pair shows that room's door
-  with its real measurements while the partner door is drawn dimmed
+  with its real measurements while the partner door is drawn dimmed. Each snapped
+  connection gets its own color from a palette (chosen deterministically from the two
+  room ids so it is stable per project, and thus effectively random per connection), so
+  matching doors across rooms are easy to spot at a glance
 
 ### Fixed
 - **Chimney hatch fill** is clipped to the chimney block — the diagonal hatching no

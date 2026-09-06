@@ -30,6 +30,19 @@ const ROOM_COLORS = {
   chimney: "#6c5ce7",
 };
 
+// Colors for rooms connected door-to-door: each connection gets its own color
+// from this palette so both doors of a snapped pair are easy to match by eye.
+const SNAPPED_DOOR_COLORS = [
+  "#ef476f",
+  "#2a9d8f",
+  "#e9c46a",
+  "#6d597a",
+  "#3d5a80",
+  "#ee6c4d",
+  "#8338ec",
+  "#0e7490",
+];
+
 // Furniture library with default dimensions in cm
 const FURNITURE_LIBRARY = [
   // Seating
@@ -2193,13 +2206,29 @@ function doorSnapPair(r, fx) {
 // uses the average width of both doors. When one room of the pair is selected
 // the selected room's door keeps its real geometry and the other door is dimmed.
 // Non-paired doors render as-is.
+// Color shared by the two doors of a snapped connection. Chosen deterministically
+// (hashed from the two room ids, order-independent) so the pair renders in the same
+// color every frame instead of flickering, while still looking random per connection.
+function snappedDoorColorHex(r, o) {
+  const key = [String(r.id), String(o.id)].sort().join("|");
+  let h = 0;
+  for (let i = 0; i < key.length; i++) h = ((h << 5) - h + key.charCodeAt(i)) | 0;
+  return SNAPPED_DOOR_COLORS[Math.abs(h) % SNAPPED_DOOR_COLORS.length];
+}
+
+function hexToRgba(hex, alpha) {
+  const n = parseInt(hex.slice(1), 16);
+  return "rgba(" + ((n >> 16) & 255) + "," + ((n >> 8) & 255) + "," + (n & 255) + "," + alpha + ")";
+}
+
 function doorRenderGeom(r, fx) {
   const pair = doorSnapPair(r, fx);
   if (!pair) return { offsetCm: fx.offsetCm, widthCm: fx.widthCm, dim: 1, merged: false, primary: true };
   const thisSel = r.id === state.selectedRoomId;
   const otherSel = pair.otherRoom.id === state.selectedRoomId;
+  const colorHex = snappedDoorColorHex(r, pair.otherRoom);
   if (thisSel || otherSel) {
-    return { offsetCm: fx.offsetCm, widthCm: fx.widthCm, dim: thisSel ? 1 : 0.35, merged: false, primary: true };
+    return { offsetCm: fx.offsetCm, widthCm: fx.widthCm, dim: thisSel ? 1 : 0.35, merged: false, primary: true, colorHex };
   }
   // Merged look: only ONE of the two doors is drawn, centered on the wall span the
   // two rooms share and using the average of the two widths, so the pair reads as a
@@ -2219,7 +2248,7 @@ function doorRenderGeom(r, fx) {
     spanCenter - r.x;
   const widthCm = (fx.widthCm + pair.otherDoor.widthCm) / 2;
   const primary = state.rooms.indexOf(r) <= state.rooms.indexOf(pair.otherRoom);
-  return { offsetCm: Math.max(0, offsetCm), widthCm, dim: 1, merged: true, primary };
+  return { offsetCm: Math.max(0, offsetCm), widthCm, dim: 1, merged: true, primary, colorHex };
 }
 
 // --- Rendering ---
@@ -2368,7 +2397,8 @@ function drawFixture(r, fx, targetCtx, pxScale) {
     const eff = doorRenderGeom(r, fx);
     dp1 = { x: a.x + ux * eff.offsetCm * pxScale, y: a.y + uy * eff.offsetCm * pxScale };
     dp2 = { x: a.x + ux * (eff.offsetCm + eff.widthCm) * pxScale, y: a.y + uy * (eff.offsetCm + eff.widthCm) * pxScale };
-    if (eff.dim < 1) doorColor = "rgba(90,90,95,0.4)";
+    if (eff.colorHex) doorColor = eff.dim < 1 ? hexToRgba(eff.colorHex, 0.4) : eff.colorHex;
+    else if (eff.dim < 1) doorColor = "rgba(90,90,95,0.4)";
     // only the primary door of a merged pair draws a symbol
     skipDoor = eff.merged && !eff.primary;
   }
@@ -2619,7 +2649,8 @@ function drawGapOnWall(r, targetCtx, wall, fromCm, toCm, depthOffset, color) {
 function drawOpeningDimensions(r, fx, targetCtx, T, pxScale) {
   const eff = fx.type === "door" ? doorRenderGeom(r, fx) : { offsetCm: fx.offsetCm, widthCm: fx.widthCm, dim: 1 };
   if (eff.merged && !eff.primary) return; // hidden partner of a merged door pair
-  const color = eff.dim < 1 ? "rgba(90,90,95,0.55)" : ROOM_COLORS[fx.type] || "#7f8c8d";
+  const color = eff.colorHex ? (eff.dim < 1 ? hexToRgba(eff.colorHex, 0.55) : eff.colorHex) :
+    (eff.dim < 1 ? "rgba(90,90,95,0.55)" : ROOM_COLORS[fx.type] || "#7f8c8d");
   const seg = roomWallSegment(r, fx.wall);
   const a = { x: cmToPixels(seg.a.x), y: cmToPixels(seg.a.y) };
   const b = { x: cmToPixels(seg.b.x), y: cmToPixels(seg.b.y) };
