@@ -1932,13 +1932,17 @@ function hitTestFixture(x, y) {
       const inDepth =
         fx.type === "heater" ? (fx.depthCm || 30) :
         fx.type === "window" ? (fx.boardDepthCm || 0) : 0;
-      const p1 = { x: a.x + ux * fx.offsetCm * pxScale, y: a.y + uy * fx.offsetCm * pxScale };
-      const p2 = { x: a.x + ux * (fx.offsetCm + fx.widthCm) * pxScale, y: a.y + uy * (fx.offsetCm + fx.widthCm) * pxScale };
+      // hit-test where the door is actually drawn (merged doors sit centered)
+      const geom = fx.type === "door" ? doorRenderGeom(r, fx) : null;
+      const offCm = geom ? geom.offsetCm : fx.offsetCm;
+      const widCm = geom ? geom.widthCm : fx.widthCm;
+      const p1 = { x: a.x + ux * offCm * pxScale, y: a.y + uy * offCm * pxScale };
+      const p2 = { x: a.x + ux * (offCm + widCm) * pxScale, y: a.y + uy * (offCm + widCm) * pxScale };
       const relX = x - p1.x;
       const relY = y - p1.y;
       const along = (relX * ux + relY * uy) / pxScale;
       const perp = (relX * n.x + relY * n.y) / pxScale; // >0 outside, <0 into room
-      const openLen = fx.widthCm;
+      const openLen = widCm;
       // window boards stick out past both jambs, so selectable area grows too
       const extra = fx.type === "window" ? (fx.boardOverlapCm != null ? fx.boardOverlapCm : 3) : 0;
       if (along < -grabCm - extra || along > openLen + grabCm + extra) continue;
@@ -2197,8 +2201,23 @@ function doorRenderGeom(r, fx) {
   if (thisSel || otherSel) {
     return { offsetCm: fx.offsetCm, widthCm: fx.widthCm, dim: thisSel ? 1 : 0.35 };
   }
+  // Merged look: both doors of the pair share one position, centered on the wall
+  // span the two rooms actually share, and use the average of the two widths —
+  // so the doors stay aligned across the shared wall instead of drifting apart.
+  const o = pair.otherRoom;
+  const spanStart = (fx.wall === "left" || fx.wall === "right")
+    ? Math.max(r.y, o.y)
+    : Math.max(r.x, o.x);
+  const spanEnd = (fx.wall === "left" || fx.wall === "right")
+    ? Math.min(r.y + r.depthCm, o.y + o.depthCm)
+    : Math.min(r.x + r.widthCm, o.x + o.widthCm);
+  const spanCenter = (spanStart + spanEnd) / 2;
+  const offsetCm = fx.wall === "right" ? spanCenter - r.y :
+    fx.wall === "left" ? r.y + r.depthCm - spanCenter :
+    fx.wall === "bottom" ? r.x + r.widthCm - spanCenter :
+    spanCenter - r.x;
   const widthCm = (fx.widthCm + pair.otherDoor.widthCm) / 2;
-  return { offsetCm: Math.max(0, (roomWallLength(r, fx.wall) - widthCm) / 2), widthCm, dim: 1 };
+  return { offsetCm: Math.max(0, offsetCm), widthCm, dim: 1 };
 }
 
 // --- Rendering ---
