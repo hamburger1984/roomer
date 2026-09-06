@@ -73,6 +73,12 @@
   opening, so existing doors are unchanged
 
 ### Fixed
+- **Canvas background follows the theme and covers the full canvas**: the canvas
+  element had a fixed white CSS background and the room editor painted a bounded
+  fill rectangle, so after zooming/panning (or beyond a loaded floor plan) a bright
+  white area showed behind the drawing in dark mode. The background now comes from a
+  theme variable on the canvas itself (dark in dark mode) and always covers the full
+  canvas, and the limited fill rectangle was removed
 - **Wall no longer drawn through openings when fixtures are added out of offset
   order**: wall band segments are cut by pairing each opening's start and end, which
   broke when a door/window stored in an earlier position on the list had a larger

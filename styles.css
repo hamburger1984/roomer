@@ -14,6 +14,7 @@
   --color-gray-border: #ddd;
   --color-background: #f5f5f5;
   --color-white: #fff;
+  --color-canvas-bg: #f0f0f0;
 
   /* Theme surfaces (light mode) */
   --color-surface: #fff;
@@ -51,6 +52,7 @@
   --color-gray: #9aa0a6;
   --color-gray-border: #3c4048;
   --color-background: #14171c;
+  --color-canvas-bg: #171a1f;
   --color-surface: #1f2329;
   --color-surface-subtle: #252a31;
   --color-surface-hover: #2f343d;
@@ -614,7 +616,7 @@ header h1 {
 
 #mainCanvas {
   display: block;
-  background: var(--color-white);
+  background: var(--color-canvas-bg);
   box-shadow: var(--shadow-md);
 }
 

@@ -3629,8 +3629,9 @@ function render() {
     ctx.drawImage(state.floorPlanImage, 0, 0);
   } else {
     const themeColors = getThemeCanvasColors();
-    ctx.fillStyle = themeColors.bg;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // The canvas background comes from CSS (#mainCanvas -> --color-canvas-bg),
+    // so it always covers the full canvas regardless of zoom/pan and follows the
+    // current theme; only the construction grid and hint are drawn here.
     if (state.roomEditorMode) {
       // Show a construction grid for from-scratch Grundrisse
       drawMeasureGrid(
