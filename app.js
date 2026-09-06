@@ -1717,6 +1717,7 @@ function addFixture(roomId, wall, type) {
   if (type === "door") {
     fx.offsetCm = 0;
     fx.widthCm = Math.min(80, len);
+    fx.doorWidthCm = fx.widthCm;
     fx.hinge = "end";
     fx.swing = "in";
   } else if (type === "window") {
@@ -1808,6 +1809,15 @@ function updateFixtureField(roomId, fiscalId, field, value) {
   if (field === "boardOverlap") {
     if (cm < 0) return;
     fx.boardOverlapCm = cm;
+    markChanges();
+    saveProject();
+    renderRoomPanel();
+    render();
+    return;
+  }
+  if (field === "doorWidth") {
+    if (cm < 0) return;
+    fx.doorWidthCm = Math.min(cm, fx.widthCm);
     markChanges();
     saveProject();
     renderRoomPanel();
@@ -2456,13 +2466,48 @@ function drawFixture(r, fx, targetCtx, pxScale) {
     // (perpendicular to the wall), always on the swing side. Out-swing doors are
     // offset one wall-thickness to the outside so the closed door rests along the
     // exterior face of the wall instead of on the wall centre line.
+    //
+    // A door reaches from jamb to jamb: its total opening width is what breaks the
+    // usable wall area. The actual leaf can be narrower and is then centred inside
+    // the opening, leaving the frame visible at both jambs (like window boards, the
+    // frame width is derived from the difference between opening and leaf width).
+    const totalW = fx.widthCm;
+    const leafW = Math.max(0, Math.min(fx.doorWidthCm != null ? fx.doorWidthCm : totalW, totalW));
+    const openingLen = Math.hypot(dp2.x - dp1.x, dp2.y - dp1.y);
+    const leafPx = leafW > 0 ? (openingLen * leafW) / totalW : 0;
+    const inset = (openingLen - leafPx) / 2;
+    const lp1 = { x: dp1.x + ux * inset, y: dp1.y + uy * inset };
+    const lp2 = { x: lp1.x + ux * leafPx, y: lp1.y + uy * leafPx };
+    // frame jambs (the part of the opening the frame occupies) protrude slightly
+    // into the room like a window board, only between the opening edge and the leaf
+    if (inset > 0.5) {
+      const fd = Math.max(3, leafPx * 0.12);
+      targetCtx.beginPath();
+      targetCtx.moveTo(dp1.x, dp1.y);
+      targetCtx.lineTo(lp1.x, lp1.y);
+      targetCtx.lineTo(lp1.x - n.x * fd, lp1.y - n.y * fd);
+      targetCtx.lineTo(dp1.x - n.x * fd, dp1.y - n.y * fd);
+      targetCtx.closePath();
+      targetCtx.moveTo(lp2.x, lp2.y);
+      targetCtx.lineTo(dp2.x, dp2.y);
+      targetCtx.lineTo(dp2.x - n.x * fd, dp2.y - n.y * fd);
+      targetCtx.lineTo(lp2.x - n.x * fd, lp2.y - n.y * fd);
+      targetCtx.closePath();
+      targetCtx.fillStyle = doorColor;
+      targetCtx.globalAlpha = 0.3;
+      targetCtx.fill();
+      targetCtx.fillStyle = doorColor;
+      targetCtx.globalAlpha = 1;
+      targetCtx.strokeStyle = doorColor;
+      targetCtx.lineWidth = 1;
+      targetCtx.stroke();
+    }
     const offset = doorOutSwingOffsetPx(fx, n, pxScale);
-    const leafLen = Math.hypot(dp2.x - dp1.x, dp2.y - dp1.y);
-    const hingeBase = fx.hinge === "start" ? dp1 : dp2;
+    const hingeBase = fx.hinge === "start" ? lp1 : lp2;
     const hinge = { x: hingeBase.x + offset.x, y: hingeBase.y + offset.y };
     const openDirX = fx.swing === "out" ? n.x : -n.x;
     const openDirY = fx.swing === "out" ? n.y : -n.y;
-    const leafEnd = { x: hinge.x + openDirX * leafLen, y: hinge.y + openDirY * leafLen };
+    const leafEnd = { x: hinge.x + openDirX * leafPx, y: hinge.y + openDirY * leafPx };
     targetCtx.strokeStyle = doorColor;
     targetCtx.lineWidth = 2;
     targetCtx.beginPath();
@@ -2471,13 +2516,13 @@ function drawFixture(r, fx, targetCtx, pxScale) {
     targetCtx.stroke();
     // swing arc from the closed door position to the open door position
     targetCtx.lineWidth = 1;
-    const closeX = hingeBase === dp2 ? -ux : ux;
-    const closeY = hingeBase === dp2 ? -uy : uy;
+    const closeX = hingeBase === lp2 ? -ux : ux;
+    const closeY = hingeBase === lp2 ? -uy : uy;
     const startAng = Math.atan2(closeY, closeX);
     const openAng = Math.atan2(openDirY, openDirX);
     const delta = Math.atan2(Math.sin(openAng - startAng), Math.cos(openAng - startAng));
     targetCtx.beginPath();
-    targetCtx.arc(hinge.x, hinge.y, leafLen, startAng, startAng + delta, delta < 0);
+    targetCtx.arc(hinge.x, hinge.y, leafPx, startAng, startAng + delta, delta < 0);
     targetCtx.stroke();
   } else if (fx.type === "heater") {
     const dp = fx.depthCm * pxScale || cmToPixels(30);
@@ -3053,6 +3098,7 @@ function renderFixtureList() {
             .map(([v, label]) => `<option value="${v}"${opening === v ? " selected" : ""}>${label}</option>`)
             .join("");
           controls.push(`<label>${t("room.direction")} <select data-dooropt="opening" data-id="${fx.id}">${openingOpts}</select></label>`);
+          controls.push(`<label>${t("room.doorWidth")} <input type="number" step="1" min="1" max="${Math.round(fx.widthCm)}" value="${Math.round(fx.doorWidthCm != null ? fx.doorWidthCm : fx.widthCm)}" data-fixturefield="doorWidth" data-id="${fx.id}" /></label>`);
         }
         if (fx.type === "heater") {
           controls.push(`<label>${t("room.depth")} <input type="number" step="1" min="1" value="${Math.round(fx.depthCm)}" data-fixturefield="depth" data-id="${fx.id}" /></label>`);

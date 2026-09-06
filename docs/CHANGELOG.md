@@ -59,6 +59,14 @@
   and thus effectively random per connection), so matching doors across rooms are easy
   to spot at a glance
 
+### Added
+- **Door leaf width**: every door now has a "Door leaf (cm)" field in the fixture
+  panel. The leaf is drawn centered inside the total opening width (the frame), which
+  keeps breaking the usable wall area on both sides like real door frames. The frame
+  is shown as two jambs between the opening edge and the leaf, and the leaf and swing
+  arc swing around the leaf width instead of the full opening. Defaults to the full
+  opening, so existing doors are unchanged
+
 ### Fixed
 - **Wall no longer drawn through openings when fixtures are added out of offset
   order**: wall band segments are cut by pairing each opening's start and end, which
