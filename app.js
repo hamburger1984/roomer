@@ -1850,6 +1850,16 @@ function hitTestFixture(x, y) {
   const pxScale = roomPxScale();
   const grabPx = 14;
   const grabCm = grabPx / pxScale;
+  let best = null;
+
+  // Prefer the smallest priority; on a tie the fixture drawn later (topmost)
+  // wins, which is achieved by replacing on equal priority.
+  const consider = (room, fx, handle, priority) => {
+    if (!best || priority <= best.priority) {
+      best = { room, fx, handle, priority };
+    }
+  };
+
   for (const r of state.rooms) {
     for (const fx of r.fixtures) {
       if (fx.type === "chimney") {
@@ -1865,13 +1875,15 @@ function hitTestFixture(x, y) {
         const x0 = dirX > 0 ? cxp : cxp - w;
         const y0 = dirY > 0 ? cyp : cyp - d;
         if (distToSegment(x, y, x0 + w, y0, x0 + w, y0 + d) <= grabPx) {
-          return { room: r, fx, handle: "chimneyW" };
+          consider(r, fx, "chimneyW", -1);
+          continue;
         }
         if (distToSegment(x, y, x0, y0 + d, x0 + w, y0 + d) <= grabPx) {
-          return { room: r, fx, handle: "chimneyD" };
+          consider(r, fx, "chimneyD", -1);
+          continue;
         }
         if (x >= x0 && x <= x0 + w && y >= y0 && y <= y0 + d) {
-          return { room: r, fx, handle: null };
+          consider(r, fx, null, 0);
         }
         continue;
       }
@@ -1885,6 +1897,11 @@ function hitTestFixture(x, y) {
       // band thickness the fixture can be grabbed on: the wall plus a margin
       // into the room
       const band = state.wallThicknessCm / 2 + grabCm;
+      // how far the fixture's drawn body reaches into the room (window board,
+      // heater body) so it can be selected anywhere on that filled area
+      const inDepth =
+        fx.type === "heater" ? (fx.depthCm || 30) :
+        fx.type === "window" ? (fx.boardDepthCm || 0) : 0;
       const p1 = { x: a.x + ux * fx.offsetCm * pxScale, y: a.y + uy * fx.offsetCm * pxScale };
       const p2 = { x: a.x + ux * (fx.offsetCm + fx.widthCm) * pxScale, y: a.y + uy * (fx.offsetCm + fx.widthCm) * pxScale };
       const relX = x - p1.x;
@@ -1892,17 +1909,25 @@ function hitTestFixture(x, y) {
       const along = (relX * ux + relY * uy) / pxScale;
       const perp = (relX * n.x + relY * n.y) / pxScale; // >0 outside, <0 into room
       const openLen = fx.widthCm;
-      if (perp > band + grabCm || perp < -grabCm) continue;
       if (along < -grabCm || along > openLen + grabCm) continue;
       // edge handles take priority for resizing
       const dStart = Math.hypot(x - p1.x, y - p1.y);
       const dEnd = Math.hypot(x - p2.x, y - p2.y);
-      if (dStart <= grabPx) return { room: r, fx, handle: "start" };
-      if (dEnd <= grabPx) return { room: r, fx, handle: "end" };
-      return { room: r, fx, handle: null };
+      if (dStart <= grabPx || dEnd <= grabPx) {
+        consider(r, fx, dStart <= dEnd ? "start" : "end", -1);
+        continue;
+      }
+      // drawn body of a window board or heater, in the room
+      if (inDepth > 0 && perp < 0 && perp >= -inDepth) {
+        consider(r, fx, null, 0);
+      }
+      // the wall band itself
+      if (perp > -grabCm && perp <= band) {
+        consider(r, fx, null, 1);
+      }
     }
   }
-  return null;
+  return best ? { room: best.room, fx: best.fx, handle: best.handle } : null;
 }
 
 // Start dragging a fixture in the room editor (world-px canvas point)
@@ -2364,14 +2389,20 @@ function drawChimney(r, fx, targetCtx, pxScale) {
   targetCtx.strokeStyle = color;
   targetCtx.lineWidth = 1.6;
   targetCtx.strokeRect(x0, y0, w, d);
+  // hatch pattern, clipped to the chimney box so it never bleeds outside
+  targetCtx.save();
+  targetCtx.beginPath();
+  targetCtx.rect(x0, y0, w, d);
+  targetCtx.clip();
   targetCtx.globalAlpha = 0.7;
   targetCtx.lineWidth = 1;
-  for (let lx = x0; lx < x0 + w + d; lx += 12) {
+  for (let lx = x0 - d; lx < x0 + w + d; lx += 12) {
     targetCtx.beginPath();
     targetCtx.moveTo(lx, y0 + d);
     targetCtx.lineTo(lx + d, y0);
     targetCtx.stroke();
   }
+  targetCtx.restore();
   targetCtx.globalAlpha = 1;
   // label
   targetCtx.fillStyle = "#2c3e50";
@@ -2416,7 +2447,7 @@ function drawRoomDimensions(r, targetCtx, T, pxScale) {
   r.fixtures.forEach((fx) => {
     const color = ROOM_COLORS[fx.type] || "#7f8c8d";
     if (fx.type === "chimney") {
-      // corner dims: width along the room face, depth along the other edge
+      // Door/window-style measurements for corner chimneys
       const corners = roomCorners(r);
       const c = corners[fx.corner];
       if (!c) return;
@@ -2426,18 +2457,20 @@ function drawRoomDimensions(r, targetCtx, T, pxScale) {
       const dirY = fx.corner === "tl" || fx.corner === "tr" ? 1 : -1;
       const w = fx.widthCm * pxScale;
       const d = fx.depthCm * pxScale;
-      const x0 = dirX > 0 ? cxp : cxp - w;
-      const y0 = dirY > 0 ? cyp : cyp - d;
-      const x1 = x0 + w;
-      const y1 = y0 + d;
-      drawRoomDim(
-        targetCtx, x0, y0 + dirY * 10, x1, y0 + dirY * 10,
-        formatLength(fx.widthCm), color, 6,
-      );
-      drawRoomDim(
-        targetCtx, x0 + dirX * 10, y0, x0 + dirX * 10, y1,
-        formatLength(fx.depthCm), color, 6,
-      );
+      // Door/window-style measurements on the two walls the corner sits on:
+      // the chimney's size from the corner, then the remaining wall to the end
+      const inA = T / 2 + 12;
+      const inB = T / 2 + 22;
+      // horizontal wall (top/bottom): width, then remaining length
+      const hFarX = cxp + dirX * w;
+      const hEndX = dirX > 0 ? cmToPixels(r.x + r.widthCm) : cmToPixels(r.x);
+      drawRoomDim(targetCtx, cxp, cyp + dirY * inA, hFarX, cyp + dirY * inA, formatLength(fx.widthCm), color, 6);
+      drawRoomDim(targetCtx, hFarX, cyp + dirY * inB, hEndX, cyp + dirY * inB, formatLength(Math.max(0, Math.round(r.widthCm - fx.widthCm))), color, 6);
+      // vertical wall (left/right): depth, then remaining length
+      const vFarY = cyp + dirY * d;
+      const vEndY = dirY > 0 ? cmToPixels(r.y + r.depthCm) : cmToPixels(r.y);
+      drawRoomDim(targetCtx, cxp + dirX * inA, cyp, cxp + dirX * inA, vFarY, formatLength(fx.depthCm), color, 6);
+      drawRoomDim(targetCtx, cxp + dirX * inB, vFarY, cxp + dirX * inB, vEndY, formatLength(Math.max(0, Math.round(r.depthCm - fx.depthCm))), color, 6);
       return;
     }
     const seg = roomWallSegment(r, fx.wall);

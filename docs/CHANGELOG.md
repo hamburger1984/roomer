@@ -35,6 +35,14 @@
   neighboring openings on the same wall are shown
 
 ### Fixed
+- **Chimney hatch fill** is clipped to the chimney block — the diagonal hatching no
+  longer bleeds past the chimney's dimensions
+- **Chimney corner dimensions** are measured door/window-style along the two walls the
+  corner sits on (size from the corner + remaining wall to the end) instead of lines
+  crossing inside the block
+- **Selecting overlapping windows and heaters**: a window's sill and a heater's body are
+  now clickable anywhere on their filled area (not just on the wall line), so a heater
+  below a window can be picked cleanly even where their wall bands overlap
 - **Room dragging was broken**: the room hit test used `distToSegment`, which was
   accidentally removed with the measurement tool in v1.12. Rooms can be grabbed and
   moved again (wall-thickness + door snapping intact)
