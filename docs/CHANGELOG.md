@@ -60,6 +60,11 @@
   to spot at a glance
 
 ### Added
+- **Focus the room editor on the selected room**: selecting a room (on the canvas
+  or in the list) collapses the room list and shows that room's elements — doors,
+  windows, heaters, chimney corners, wall picker and add buttons — instead of both
+  sections stacked. Deselecting (clicking empty canvas) collapses the elements and
+  brings the room list back
 - **Door leaf width**: every door now has a "Door leaf (cm)" field in the fixture
   panel. The leaf is drawn centered inside the total opening width (the frame), which
   keeps breaking the usable wall area on both sides like real door frames. The frame

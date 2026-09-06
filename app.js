@@ -2947,6 +2947,11 @@ function renderRoomPanel() {
 
   renderRoomList();
   renderRoomDetail();
+
+  // Focused mode: with a room selected, collapse the room list and show that
+  // room's elements (doors, windows, heaters, chimneys); without a selection,
+  // collapse the elements and show the room list again.
+  panel.classList.toggle("room-focused", !!state.selectedRoomId);
 }
 
 function renderRoomList() {
