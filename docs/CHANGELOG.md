@@ -60,6 +60,12 @@
   to spot at a glance
 
 ### Fixed
+- **Wall no longer drawn through openings when fixtures are added out of offset
+  order**: wall band segments are cut by pairing each opening's start and end, which
+  broke when a door/window stored in an earlier position on the list had a larger
+  offset than a later fixture (e.g. door at the right end added before a window at the
+  left end of the same wall) — wall was rendered straight through the opening. The
+  openings are now sorted by offset before the wall segments are sliced
 - **Out-swing doors drawn outside the wall**: a door that opens out of the room is
   now drawn offset a full wall thickness to the outside (hinge, leaf and swing arc),
   so the closed door rests along the exterior face instead of on the wall centre line.

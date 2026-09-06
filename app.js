@@ -2330,6 +2330,11 @@ function drawRoomWall(r, wall, targetCtx, T, pxScale) {
     const eff = f.type === "door" ? doorRenderGeom(r, f) : { offsetCm: f.offsetCm, widthCm: f.widthCm };
     openings.push({ offsetCm: eff.offsetCm, widthCm: eff.widthCm });
   }
+  // The alternating start/end pairing below only works when openings are ordered by
+  // offset along the wall. Fixtures may be stored in any order, so sort first;
+  // otherwise a later-added opening whose offset comes first breaks the pairing and
+  // wall is erroneously drawn through an opening.
+  openings.sort((a, b) => a.offsetCm - b.offsetCm);
 
   targetCtx.save();
   targetCtx.lineCap = "butt";
