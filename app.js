@@ -1747,13 +1747,32 @@ function deleteFixture(roomId, fiscalId) {
   render();
 }
 
-// Change how a door opens, without moving it: "hinge" = start/end edge of the
-// opening (swings to the left vs right side), "swing" = in/out of the room
+// Change how a door opens, without moving it.
+//   "opening" = "<swing>-<hinge>", e.g. "in-start" — opens into the room,
+//     hinged at the leading ("start") edge. All of in/out x start/end is
+//     possible, so every "in/out x left/right" combination can be expressed.
+//   Single-field "hinge"/"swing" changes are still accepted for backward
+//   compatibility.
 function setDoorOption(roomId, fixtureId, field, value) {
   const r = getRoom(roomId);
   if (!r) return;
   const fx = r.fixtures.find((f) => f.id === fixtureId);
   if (!fx || fx.type !== "door") return;
+  if (field === "opening") {
+    const match = /^(in|out)-(start|end)$/.exec(value);
+    if (!match) return;
+    const swing = match[1];
+    const hinge = match[2];
+    if (fx.swing === swing && fx.hinge === hinge) return;
+    pushUndoState();
+    fx.swing = swing;
+    fx.hinge = hinge;
+    markChanges();
+    saveProject();
+    renderRoomPanel();
+    render();
+    return;
+  }
   if (field === "hinge" && value !== "start" && value !== "end") return;
   if (field === "swing" && value !== "in" && value !== "out") return;
   if (fx[field] === value) return;
@@ -2119,12 +2138,12 @@ function snapRoomPosition(room, nx, ny) {
 
 // --- Rendering ---
 
-function drawRoomsLayer(targetCtx, withDims) {
+function drawRoomsLayer(targetCtx, withDims, keepAllDims) {
   if (!state.rooms.length) return;
-  state.rooms.forEach((r) => drawRoom(r, targetCtx, withDims));
+  state.rooms.forEach((r) => drawRoom(r, targetCtx, withDims, keepAllDims));
 }
 
-function drawRoom(r, targetCtx, withDims) {
+function drawRoom(r, targetCtx, withDims, keepAllDims) {
   const pxScale = roomPxScale();
   const T = cmToPixels(state.wallThicknessCm);
   const selected = r.id === state.selectedRoomId;
@@ -2174,7 +2193,8 @@ function drawRoom(r, targetCtx, withDims) {
     targetCtx.restore();
   }
 
-  if (withDims) drawRoomDimensions(r, targetCtx, T, pxScale);
+  // Measurements only for the selected room (or all rooms in a PNG export)
+  if (withDims && (keepAllDims || selected)) drawRoomDimensions(r, targetCtx, T, pxScale);
 }
 
 function drawRoomWall(r, wall, targetCtx, T, pxScale) {
@@ -2245,7 +2265,6 @@ function drawFixture(r, fx, targetCtx, pxScale) {
   const o2 = (fx.offsetCm + fx.widthCm) * pxScale;
   const p1 = { x: a.x + ux * o1, y: a.y + uy * o1 };
   const p2 = { x: a.x + ux * o2, y: a.y + uy * o2 };
-  const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
   const T = cmToPixels(state.wallThicknessCm);
 
   targetCtx.save();
@@ -2285,15 +2304,6 @@ function drawFixture(r, fx, targetCtx, pxScale) {
       targetCtx.closePath();
       targetCtx.fill();
       targetCtx.stroke();
-      targetCtx.fillStyle = color;
-      targetCtx.font = "bold 10px sans-serif";
-      targetCtx.textAlign = "center";
-      targetCtx.textBaseline = "middle";
-      targetCtx.fillText(
-        fx.boardDepthCm + " cm",
-        mid.x - n.x * (bd / 2),
-        mid.y - n.y * (bd / 2),
-      );
     }
   } else if (fx.type === "door") {
     // Door leaf + swing arc on the SAME side of the wall. The hinge sits on the
@@ -2404,12 +2414,6 @@ function drawChimney(r, fx, targetCtx, pxScale) {
   }
   targetCtx.restore();
   targetCtx.globalAlpha = 1;
-  // label
-  targetCtx.fillStyle = "#2c3e50";
-  targetCtx.font = "bold 11px sans-serif";
-  targetCtx.textAlign = "center";
-  targetCtx.textBaseline = "middle";
-  targetCtx.fillText(`${fx.widthCm} × ${fx.depthCm} cm`, x0 + w / 2, y0 + d / 2);
   // resize handles on the two free faces
   if (fx.id === state.selectedFixtureId) {
     const hr = 4;
@@ -2430,9 +2434,230 @@ function drawChimney(r, fx, targetCtx, pxScale) {
   targetCtx.restore();
 }
 
+// The selected fixture if it belongs to room r, else null
+function roomSelectedFixture(r) {
+  const id = state.selectedFixtureId;
+  if (!id) return null;
+  const fx = r.fixtures.find((f) => f.id === id);
+  return fx || null;
+}
+
+// The span [start,end] (in wall-offset cm) a chimney occupies on wall,
+// or null if the chimney does not touch that wall
+function chimneySpanOnWall(r, fx, wall) {
+  const w = fx.widthCm;
+  const d = fx.depthCm;
+  const W = r.widthCm;
+  const D = r.depthCm;
+  switch (fx.corner) {
+    case "tl": return wall === "top" ? { start: 0, end: w } : wall === "left" ? { start: D - d, end: D } : null;
+    case "tr": return wall === "top" ? { start: W - w, end: W } : wall === "right" ? { start: 0, end: d } : null;
+    case "br": return wall === "bottom" ? { start: 0, end: w } : wall === "right" ? { start: D - d, end: D } : null;
+    case "bl": return wall === "bottom" ? { start: W - w, end: W } : wall === "left" ? { start: 0, end: d } : null;
+  }
+  return null;
+}
+
+// All items sitting on a wall (openings + chimney spans) sorted by offset
+function wallOccupantSpans(r, wall) {
+  const list = [];
+  for (const fx of r.fixtures) {
+    const span = fx.type === "chimney"
+      ? chimneySpanOnWall(r, fx, wall)
+      : fx.wall === wall ? { start: fx.offsetCm, end: fx.offsetCm + fx.widthCm } : null;
+    if (span) list.push({ id: fx.id, type: fx.type, start: span.start, end: span.end });
+  }
+  return list.sort((a, b) => a.start - b.start);
+}
+
+// A point on a wall at wall-offset offCm, in world px
+function wallPointPx(r, wall, offCm) {
+  const s = roomWallSegment(r, wall);
+  const dx = s.b.x - s.a.x;
+  const dy = s.b.y - s.a.y;
+  const len = Math.hypot(dx, dy) || 1;
+  return {
+    x: cmToPixels(s.a.x + dx * (offCm / len)),
+    y: cmToPixels(s.a.y + dy * (offCm / len)),
+  };
+}
+
+// A linear gap dimension between two offsets on a wall, drawn depthOffset
+// px inside the room
+function drawGapOnWall(r, targetCtx, wall, fromCm, toCm, depthOffset, color) {
+  const n = roomWallNormal(r, wall);
+  const pA = wallPointPx(r, wall, fromCm);
+  const pB = wallPointPx(r, wall, toCm);
+  drawRoomDim(
+    targetCtx, pA.x - n.x * depthOffset, pA.y - n.y * depthOffset,
+    pB.x - n.x * depthOffset, pB.y - n.y * depthOffset,
+    formatLength(Math.round(Math.abs(toCm - fromCm))), color, 6,
+  );
+}
+
+// Doors/windows/heaters: left gap / width / right gap, staggered inside
+function drawOpeningDimensions(r, fx, targetCtx, T, pxScale) {
+  const color = ROOM_COLORS[fx.type] || "#7f8c8d";
+  const seg = roomWallSegment(r, fx.wall);
+  const a = { x: cmToPixels(seg.a.x), y: cmToPixels(seg.a.y) };
+  const b = { x: cmToPixels(seg.b.x), y: cmToPixels(seg.b.y) };
+  const lenCm = roomWallLength(r, fx.wall);
+  const plen = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+  const ux = (b.x - a.x) / plen;
+  const uy = (b.y - a.y) / plen;
+  const n = roomWallNormal(r, fx.wall);
+  const p1 = { x: a.x + ux * fx.offsetCm * pxScale, y: a.y + uy * fx.offsetCm * pxScale };
+  const p2 = {
+    x: a.x + ux * (fx.offsetCm + fx.widthCm) * pxScale,
+    y: a.y + uy * (fx.offsetCm + fx.widthCm) * pxScale,
+  };
+  // three dims on the inside, staggered: left gap / opening width / right gap
+  const in1 = T / 2 + 8;
+  const inW = T / 2 + 12;
+  const in2 = T / 2 + 22;
+  const a1 = { x: a.x - n.x * in1, y: a.y - n.y * in1 };
+  const p1d = { x: p1.x - n.x * in1, y: p1.y - n.y * in1 };
+  const pW1 = { x: p1.x - n.x * inW, y: p1.y - n.y * inW };
+  const pW2 = { x: p2.x - n.x * inW, y: p2.y - n.y * inW };
+  const p2d = { x: p2.x - n.x * in2, y: p2.y - n.y * in2 };
+  const b2 = { x: b.x - n.x * in2, y: b.y - n.y * in2 };
+  drawRoomDim(targetCtx, a1.x, a1.y, p1d.x, p1d.y, formatLength(fx.offsetCm), color, 6);
+  drawRoomDim(targetCtx, pW1.x, pW1.y, pW2.x, pW2.y, formatLength(fx.widthCm), color, 5);
+  drawRoomDim(
+    targetCtx, p2d.x, p2d.y, b2.x, b2.y,
+    formatLength(Math.max(0, Math.round(lenCm - fx.offsetCm - fx.widthCm))), color, 6,
+  );
+}
+
+// Chimneys: size-runner from the corner plus, on each adjacent wall, the gap to
+// the next item (or the remainder to the wall end when the wall is empty)
+function drawChimneyGapDimensions(r, fx, targetCtx, T) {
+  const color = ROOM_COLORS.chimney || "#7f8c8d";
+  const corners = roomCorners(r);
+  const c = corners[fx.corner];
+  if (!c) return;
+  const cxp = cmToPixels(c.x);
+  const cyp = cmToPixels(c.y);
+  const dirX = fx.corner === "tl" || fx.corner === "bl" ? 1 : -1;
+  const dirY = fx.corner === "tl" || fx.corner === "tr" ? 1 : -1;
+  const inA = T / 2 + 12;
+  const inB = T / 2 + 22;
+  const wallLenH = r.widthCm;
+  const wallLenV = r.depthCm;
+  const spans = {
+    tl: { h: ["top", 0, fx.widthCm], v: ["left", wallLenV - fx.depthCm, wallLenV] },
+    tr: { h: ["top", wallLenH - fx.widthCm, wallLenH], v: ["right", 0, fx.depthCm] },
+    br: { h: ["bottom", 0, fx.widthCm], v: ["right", wallLenV - fx.depthCm, wallLenV] },
+    bl: { h: ["bottom", wallLenH - fx.widthCm, wallLenH], v: ["left", 0, fx.depthCm] },
+  };
+  if (!spans[fx.corner]) return;
+  const nearestOn = (wall, cStart, cEnd) => {
+    let best = null;
+    for (const nb of r.fixtures) {
+      if (nb.type === "chimney" || nb.wall !== wall) continue;
+      const nbStart = nb.offsetCm;
+      const nbEnd = nb.offsetCm + nb.widthCm;
+      if (nbEnd <= cStart) {
+        const d = cStart - nbEnd;
+        if (!best || d < best.d) best = { d, dir: -1, edge: nbEnd };
+      } else if (nbStart >= cEnd) {
+        const d = nbStart - cEnd;
+        if (!best || d < best.d) best = { d, dir: 1, edge: nbStart };
+      }
+    }
+    return best;
+  };
+  const drawOne = (spanArr, isHoriz, remainLabel) => {
+    const [wall, cStart, cEnd] = spanArr;
+    // the chimney edge facing the wall remainder (start edge if the chimney
+    // begins at the wall start, else the end edge)
+    const farEdge = cStart === 0 ? cEnd : cStart;
+    const oppositeEnd = cStart === 0 ? (isHoriz ? wallLenH : wallLenV) : 0;
+    const ePx = wallPointPx(r, wall, farEdge);
+    // the chimney's own size from the corner ...
+    if (isHoriz) {
+      drawRoomDim(targetCtx, cxp, cyp + dirY * inA, ePx.x, cyp + dirY * inA, formatLength(fx.widthCm), color, 6);
+    } else {
+      drawRoomDim(targetCtx, cxp + dirX * inA, cyp, cxp + dirX * inA, ePx.y, formatLength(fx.depthCm), color, 6);
+    }
+    // ... in addition to the gap to the next item (or the wall remainder)
+    const nb = nearestOn(wall, cStart, cEnd);
+    let x1, y1, x2, y2, label;
+    if (nb) {
+      const edgePx = wallPointPx(r, wall, nb.dir > 0 ? cEnd : cStart);
+      const nbPx = wallPointPx(r, wall, nb.edge);
+      if (isHoriz) {
+        x1 = edgePx.x; y1 = cyp + dirY * inB;
+        x2 = nbPx.x; y2 = cyp + dirY * inB;
+      } else {
+        x1 = cxp + dirX * inB; y1 = edgePx.y;
+        x2 = cxp + dirX * inB; y2 = nbPx.y;
+      }
+      label = formatLength(Math.round(nb.d));
+    } else {
+      const oPx = wallPointPx(r, wall, oppositeEnd);
+      if (isHoriz) {
+        x1 = ePx.x; y1 = cyp + dirY * inB;
+        x2 = oPx.x; y2 = cyp + dirY * inB;
+      } else {
+        x1 = cxp + dirX * inB; y1 = ePx.y;
+        x2 = cxp + dirX * inB; y2 = oPx.y;
+      }
+      label = remainLabel;
+    }
+    drawRoomDim(targetCtx, x1, y1, x2, y2, label, color, 6);
+  };
+  drawOne(spans[fx.corner].h, true, formatLength(Math.max(0, Math.round(wallLenH - fx.widthCm))));
+  drawOne(spans[fx.corner].v, false, formatLength(Math.max(0, Math.round(wallLenV - fx.depthCm))));
+}
+
+// Gaps between the selected opening and its immediate neighbours on the wall
+function drawEntityNeighborGaps(r, fx, targetCtx, T) {
+  const inG = T / 2 + 32;
+  const items = wallOccupantSpans(r, fx.wall);
+  const idx = items.findIndex((it) => it.id === fx.id);
+  if (idx < 0) return;
+  const prev = items[idx - 1];
+  const next = items[idx + 1];
+  if (prev) {
+    const gap = fx.offsetCm - prev.end;
+    if (gap > 0) drawGapOnWall(r, targetCtx, fx.wall, prev.end, fx.offsetCm, inG, "#95a5a6");
+  }
+  if (next) {
+    const gap = next.start - (fx.offsetCm + fx.widthCm);
+    if (gap > 0) drawGapOnWall(r, targetCtx, fx.wall, fx.offsetCm + fx.widthCm, next.start, inG, "#95a5a6");
+  }
+}
+
+// In room mode: gaps between every pair of consecutive openings on a wall
+// (chimney gaps are already drawn by the chimney dimensions)
+function drawWallSegmentGaps(r, targetCtx, T) {
+  const inG = T / 2 + 32;
+  for (const wall of ROOM_WALL_TYPES) {
+    const items = wallOccupantSpans(r, wall).filter((it) => it.type !== "chimney");
+    for (let i = 0; i < items.length - 1; i++) {
+      const gap = items[i + 1].start - items[i].end;
+      if (gap <= 0) continue;
+      drawGapOnWall(r, targetCtx, wall, items[i].end, items[i + 1].start, inG, "#95a5a6");
+    }
+  }
+}
+
 // Automatic dimensions: wall lengths on the outside, openings on the inside
 function drawRoomDimensions(r, targetCtx, T, pxScale) {
   targetCtx.save();
+  // A selected fixture narrows the measurements to the ones related to it
+  const selFx = roomSelectedFixture(r);
+  if (selFx) {
+    if (selFx.type === "chimney") {
+      drawChimneyGapDimensions(r, selFx, targetCtx, T);
+    } else {
+      drawOpeningDimensions(r, selFx, targetCtx, T, pxScale);
+      drawEntityNeighborGaps(r, selFx, targetCtx, T);
+    }
+    targetCtx.restore();
+    return;
+  }
   for (const wall of ROOM_WALL_TYPES) {
     const seg = roomWallSegment(r, wall);
     const a = { x: cmToPixels(seg.a.x), y: cmToPixels(seg.a.y) };
@@ -2445,97 +2670,12 @@ function drawRoomDimensions(r, targetCtx, T, pxScale) {
     drawRoomDim(targetCtx, outA.x, outA.y, outB.x, outB.y, label, "#7f8c8d");
   }
   r.fixtures.forEach((fx) => {
-    const color = ROOM_COLORS[fx.type] || "#7f8c8d";
-    if (fx.type === "chimney") {
-      // Door/window-style measurements for corner chimneys
-      const corners = roomCorners(r);
-      const c = corners[fx.corner];
-      if (!c) return;
-      const cxp = cmToPixels(c.x);
-      const cyp = cmToPixels(c.y);
-      const dirX = fx.corner === "tl" || fx.corner === "bl" ? 1 : -1;
-      const dirY = fx.corner === "tl" || fx.corner === "tr" ? 1 : -1;
-      const w = fx.widthCm * pxScale;
-      const d = fx.depthCm * pxScale;
-      // Door/window-style measurements on the two walls the corner sits on:
-      // the chimney's size from the corner, then the remaining wall to the end
-      const inA = T / 2 + 12;
-      const inB = T / 2 + 22;
-      // horizontal wall (top/bottom): width, then remaining length
-      const hFarX = cxp + dirX * w;
-      const hEndX = dirX > 0 ? cmToPixels(r.x + r.widthCm) : cmToPixels(r.x);
-      drawRoomDim(targetCtx, cxp, cyp + dirY * inA, hFarX, cyp + dirY * inA, formatLength(fx.widthCm), color, 6);
-      drawRoomDim(targetCtx, hFarX, cyp + dirY * inB, hEndX, cyp + dirY * inB, formatLength(Math.max(0, Math.round(r.widthCm - fx.widthCm))), color, 6);
-      // vertical wall (left/right): depth, then remaining length
-      const vFarY = cyp + dirY * d;
-      const vEndY = dirY > 0 ? cmToPixels(r.y + r.depthCm) : cmToPixels(r.y);
-      drawRoomDim(targetCtx, cxp + dirX * inA, cyp, cxp + dirX * inA, vFarY, formatLength(fx.depthCm), color, 6);
-      drawRoomDim(targetCtx, cxp + dirX * inB, vFarY, cxp + dirX * inB, vEndY, formatLength(Math.max(0, Math.round(r.depthCm - fx.depthCm))), color, 6);
-      return;
-    }
-    const seg = roomWallSegment(r, fx.wall);
-    const a = { x: cmToPixels(seg.a.x), y: cmToPixels(seg.a.y) };
-    const b = { x: cmToPixels(seg.b.x), y: cmToPixels(seg.b.y) };
-    const lenCm = roomWallLength(r, fx.wall);
-    const plen = Math.hypot(b.x - a.x, b.y - a.y) || 1;
-    const ux = (b.x - a.x) / plen;
-    const uy = (b.y - a.y) / plen;
-    const n = roomWallNormal(r, fx.wall);
-    const p1 = { x: a.x + ux * fx.offsetCm * pxScale, y: a.y + uy * fx.offsetCm * pxScale };
-    const p2 = {
-      x: a.x + ux * (fx.offsetCm + fx.widthCm) * pxScale,
-      y: a.y + uy * (fx.offsetCm + fx.widthCm) * pxScale,
-    };
-    // three dims on the inside, staggered: left gap / opening width / right gap
-    const in1 = T / 2 + 8;
-    const inW = T / 2 + 12;
-    const in2 = T / 2 + 22;
-    const a1 = { x: a.x - n.x * in1, y: a.y - n.y * in1 };
-    const p1d = { x: p1.x - n.x * in1, y: p1.y - n.y * in1 };
-    const pW1 = { x: p1.x - n.x * inW, y: p1.y - n.y * inW };
-    const pW2 = { x: p2.x - n.x * inW, y: p2.y - n.y * inW };
-    const p2d = { x: p2.x - n.x * in2, y: p2.y - n.y * in2 };
-    const b2 = { x: b.x - n.x * in2, y: b.y - n.y * in2 };
-    drawRoomDim(targetCtx, a1.x, a1.y, p1d.x, p1d.y, formatLength(fx.offsetCm), color, 6);
-    drawRoomDim(targetCtx, pW1.x, pW1.y, pW2.x, pW2.y, formatLength(fx.widthCm), color, 5);
-    drawRoomDim(
-      targetCtx, p2d.x, p2d.y, b2.x, b2.y,
-      formatLength(Math.max(0, Math.round(lenCm - fx.offsetCm - fx.widthCm))), color, 6,
-    );
+    if (fx.type === "chimney") drawChimneyGapDimensions(r, fx, targetCtx, T);
+    else drawOpeningDimensions(r, fx, targetCtx, T, pxScale);
   });
 
-  // While a fixture is being dragged, also show the gaps to its neighbours
-  // along the same wall
-  if (state.draggingFixture) {
-    const dgRoom = getRoom(state.draggingFixture.roomId);
-    const dgFx = dgRoom && dgRoom.fixtures.find((f) => f.id === state.draggingFixture.fixtureId);
-    if (dgRoom && dgFx && dgFx.type !== "chimney") {
-      const sameWall = dgRoom.fixtures
-        .filter((f) => f.type !== "chimney" && f.wall === dgFx.wall)
-        .sort((x, y) => x.offsetCm - y.offsetCm);
-      const inG = T / 2 + 32;
-      const seg = roomWallSegment(dgRoom, dgFx.wall);
-      const ga = { x: cmToPixels(seg.a.x), y: cmToPixels(seg.a.y) };
-      const gb = { x: cmToPixels(seg.b.x), y: cmToPixels(seg.b.y) };
-      const gplen = Math.hypot(gb.x - ga.x, gb.y - ga.y) || 1;
-      const gux = (gb.x - ga.x) / gplen;
-      const guy = (gb.y - ga.y) / gplen;
-      const gn = roomWallNormal(dgRoom, dgFx.wall);
-      const gx = (t) => ga.x + gux * t * pxScale - gn.x * inG;
-      const gy = (t) => ga.y + guy * t * pxScale - gn.y * inG;
-      for (let i = 0; i < sameWall.length - 1; i++) {
-        const l = sameWall[i];
-        const rr = sameWall[i + 1];
-        const gap = rr.offsetCm - (l.offsetCm + l.widthCm);
-        if (gap <= 0) continue;
-        drawRoomDim(
-          targetCtx, gx(l.offsetCm + l.widthCm), gy(l.offsetCm + l.widthCm),
-          gx(rr.offsetCm), gy(rr.offsetCm),
-          formatLength(Math.round(gap)), "#95a5a6", 6,
-        );
-      }
-    }
-  }
+  // Gaps between consecutive openings on each wall
+  drawWallSegmentGaps(r, targetCtx, T);
 
   targetCtx.restore();
 }
@@ -2750,16 +2890,16 @@ function renderFixtureList() {
             bottom: { start: "Right", end: "Left" },
             left: { start: "Bottom", end: "Top" },
           }[fx.wall] || { start: "Left", end: "Right" };
-          const hingeOpts = [
-            `<option value="end"${fx.hinge !== "start" ? " selected" : ""}>${t("room.opensTo")} ${t("room.wall" + compass.end)}</option>`,
-            `<option value="start"${fx.hinge === "start" ? " selected" : ""}>${t("room.opensTo")} ${t("room.wall" + compass.start)}</option>`,
-          ].join("");
-          const swingOpts = [
-            `<option value="in"${fx.swing !== "out" ? " selected" : ""}>${t("room.swingIn")}</option>`,
-            `<option value="out"${fx.swing === "out" ? " selected" : ""}>${t("room.swingOut")}</option>`,
-          ].join("");
-          controls.push(`<label>${t("room.direction")} <select data-dooropt="hinge" data-id="${fx.id}">${hingeOpts}</select></label>`);
-          controls.push(`<label>${t("room.swing")} <select data-dooropt="swing" data-id="${fx.id}">${swingOpts}</select></label>`);
+          const opening = `${fx.swing}-${fx.hinge}`;
+          const openingOpts = [
+            ["in-start", `${t("room.swingIn")} · ${t("room.wall" + compass.start)}`],
+            ["in-end", `${t("room.swingIn")} · ${t("room.wall" + compass.end)}`],
+            ["out-start", `${t("room.swingOut")} · ${t("room.wall" + compass.start)}`],
+            ["out-end", `${t("room.swingOut")} · ${t("room.wall" + compass.end)}`],
+          ]
+            .map(([v, label]) => `<option value="${v}"${opening === v ? " selected" : ""}>${label}</option>`)
+            .join("");
+          controls.push(`<label>${t("room.direction")} <select data-dooropt="opening" data-id="${fx.id}">${openingOpts}</select></label>`);
         }
         if (fx.type === "heater") {
           controls.push(`<label>${t("room.depth")} <input type="number" step="1" min="1" value="${Math.round(fx.depthCm)}" data-fixturefield="depth" data-id="${fx.id}" /></label>`);
@@ -2871,7 +3011,8 @@ function exportMeasurementImage() {
   } else {
     octx.drawImage(state.floorPlanImage, 0, 0);
   }
-  drawRoomsLayer(octx, true);
+  // Export keeps measurements for every room
+  drawRoomsLayer(octx, true, true);
   octx.restore();
 
   // Caption bar with project and scale info

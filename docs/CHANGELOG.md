@@ -14,12 +14,15 @@
 - **Room plans are stored and restored**: rooms-only / blank projects open directly in
   the room editor when re-opened (or opened from the saved-project list) instead of being
   hidden behind the "create new project" overlay
-- **Door opening direction**: every door has controls to flip how it opens — the
-  door stays on its wall, only the opening changes: hinge on the trailing/leading
-  edge of the opening (a top-wall door opens to the left or right, a right-wall
-  door to the top or bottom, etc.) and swing *into* the room or *out* of it. The
-  leaf and swing arc always sit on the same side of the wall (arc runs from the
-  closed position to the open position)
+- **Door opening direction**: every door has a single "Direction" dropdown with all
+  four opening modes — into the room (left or right) and out of the room (left or
+  right), relative to the wall (a top-wall door opens to the left or right, a
+  right-wall door to the top or bottom, and so on). This covers doors that open out
+  of a hallway into a room as well as doors that open into the room from the hallway;
+  the door stays on its wall, only the opening changes. The leaf and swing arc always
+  sit on the same side of the wall (arc runs from the closed position to the open
+  position). Saved projects keep working — the direction is stored as hinge
+  (leading/trailing edge) plus swing (in/out)
 - **Room naming**: each room card has an editable name field (empty = auto "Room n"),
   and custom names are drawn centered on the room and included in PNG exports
 - **Walls drawn outside the measured area**: the wall band now extends outward from the
@@ -33,13 +36,29 @@
   wall and resized by grabbing the two edge handles; chimney corners resize via width
   and depth handles. While dragging, the measurements update live and the gaps to the
   neighboring openings on the same wall are shown
+- **Measurements only for the selected room**: all dimension lines are hidden on
+  unselected rooms, so the plan stays clean with several rooms; they reappear when a
+  room is selected. PNG exports still show dimensions for every room
+- **Selecting a fixture narrows the measurements to it**: while a door, window, heater
+  or chimney is selected (clicked or dragged) only the measurements that relate to it
+  stay visible — its gaps to the walls and its immediate neighbors. Selecting the room
+  itself brings back the full measurement set for that room
+- **Chimney gaps**: on the drawing each adjacent wall shows the chimney's size-runners
+  from the corner plus the gap to the next fixture (or the remaining wall length when the
+  wall is empty). Room mode also shows the gap between each pair of consecutive openings
+  on a wall
 
 ### Fixed
 - **Chimney hatch fill** is clipped to the chimney block — the diagonal hatching no
   longer bleeds past the chimney's dimensions
-- **Chimney corner dimensions** are measured door/window-style along the two walls the
-  corner sits on (size from the corner + remaining wall to the end) instead of lines
-  crossing inside the block
+- **Chimney corner measurements** run along the two walls the corner sits on instead of
+  lines crossing inside the block: size-runners from the corner, the gap to the next
+  fixture on each wall, or the remaining wall length when that wall is empty
+- **Chimney surface label removed**: the width × depth text printed on the block is gone;
+  the chimney's size now only appears as dimension runners in measurement mode, matching
+  the other fixtures
+- **Window board label removed**: the board depth text printed on the window ledge is
+  gone too; like every fixture, the window's measurements only appear in measurement mode
 - **Selecting overlapping windows and heaters**: a window's sill and a heater's body are
   now clickable anywhere on their filled area (not just on the wall line), so a heater
   below a window can be picked cleanly even where their wall bands overlap
