@@ -2195,15 +2195,16 @@ function doorSnapPair(r, fx) {
 // Non-paired doors render as-is.
 function doorRenderGeom(r, fx) {
   const pair = doorSnapPair(r, fx);
-  if (!pair) return { offsetCm: fx.offsetCm, widthCm: fx.widthCm, dim: 1 };
+  if (!pair) return { offsetCm: fx.offsetCm, widthCm: fx.widthCm, dim: 1, merged: false, primary: true };
   const thisSel = r.id === state.selectedRoomId;
   const otherSel = pair.otherRoom.id === state.selectedRoomId;
   if (thisSel || otherSel) {
-    return { offsetCm: fx.offsetCm, widthCm: fx.widthCm, dim: thisSel ? 1 : 0.35 };
+    return { offsetCm: fx.offsetCm, widthCm: fx.widthCm, dim: thisSel ? 1 : 0.35, merged: false, primary: true };
   }
-  // Merged look: both doors of the pair share one position, centered on the wall
-  // span the two rooms actually share, and use the average of the two widths —
-  // so the doors stay aligned across the shared wall instead of drifting apart.
+  // Merged look: only ONE of the two doors is drawn, centered on the wall span the
+  // two rooms share and using the average of the two widths, so the pair reads as a
+  // single centered doorway (the two wall reveals coincide; drawing both door symbols
+  // would show two doors sitting next to each other).
   const o = pair.otherRoom;
   const spanStart = (fx.wall === "left" || fx.wall === "right")
     ? Math.max(r.y, o.y)
@@ -2217,7 +2218,8 @@ function doorRenderGeom(r, fx) {
     fx.wall === "bottom" ? r.x + r.widthCm - spanCenter :
     spanCenter - r.x;
   const widthCm = (fx.widthCm + pair.otherDoor.widthCm) / 2;
-  return { offsetCm: Math.max(0, offsetCm), widthCm, dim: 1 };
+  const primary = state.rooms.indexOf(r) <= state.rooms.indexOf(pair.otherRoom);
+  return { offsetCm: Math.max(0, offsetCm), widthCm, dim: 1, merged: true, primary };
 }
 
 // --- Rendering ---
@@ -2354,17 +2356,21 @@ function drawFixture(r, fx, targetCtx, pxScale) {
   const p2 = { x: a.x + ux * o2, y: a.y + uy * o2 };
   const T = cmToPixels(state.wallThicknessCm);
 
-  // Door-to-door snapped doors may render with effective geometry: both doors
-  // merged at the wall center when neither room is selected, or the non-selected
-  // partner door dimmed while the other room is selected
+  // Door-to-door snapped doors may render with effective geometry: the pair is
+  // drawn as ONE merged door at the shared wall center when neither room is
+  // selected, or real geometry with the non-selected partner door dimmed while
+  // the other room is selected
   let dp1 = p1;
   let dp2 = p2;
   let doorColor = color;
+  let skipDoor = false;
   if (fx.type === "door") {
     const eff = doorRenderGeom(r, fx);
     dp1 = { x: a.x + ux * eff.offsetCm * pxScale, y: a.y + uy * eff.offsetCm * pxScale };
     dp2 = { x: a.x + ux * (eff.offsetCm + eff.widthCm) * pxScale, y: a.y + uy * (eff.offsetCm + eff.widthCm) * pxScale };
     if (eff.dim < 1) doorColor = "rgba(90,90,95,0.4)";
+    // only the primary door of a merged pair draws a symbol
+    skipDoor = eff.merged && !eff.primary;
   }
 
   targetCtx.save();
@@ -2410,6 +2416,12 @@ function drawFixture(r, fx, targetCtx, pxScale) {
       targetCtx.stroke();
     }
   } else if (fx.type === "door") {
+    // In a merged pair only the primary door draws a symbol; the partner door's
+    // wall reveal is still shown by its room so the two read as one opening
+    if (skipDoor) {
+      targetCtx.restore();
+      return;
+    }
     // Door leaf + swing arc on the SAME side of the wall. The hinge sits on the
     // trailing ("end") or leading ("start") edge of the opening, and the door
     // swings into the room ("in") or out of it ("out"). The arc runs from the
@@ -2606,6 +2618,7 @@ function drawGapOnWall(r, targetCtx, wall, fromCm, toCm, depthOffset, color) {
 // Doors/windows/heaters: left gap / width / right gap, staggered inside
 function drawOpeningDimensions(r, fx, targetCtx, T, pxScale) {
   const eff = fx.type === "door" ? doorRenderGeom(r, fx) : { offsetCm: fx.offsetCm, widthCm: fx.widthCm, dim: 1 };
+  if (eff.merged && !eff.primary) return; // hidden partner of a merged door pair
   const color = eff.dim < 1 ? "rgba(90,90,95,0.55)" : ROOM_COLORS[fx.type] || "#7f8c8d";
   const seg = roomWallSegment(r, fx.wall);
   const a = { x: cmToPixels(seg.a.x), y: cmToPixels(seg.a.y) };

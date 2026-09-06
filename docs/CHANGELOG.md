@@ -51,11 +51,11 @@
   beyond the window on both sides (symmetric); the ledge stays selectable over the full
   overhang. Defaults to 3 cm
 - **Snapped door rendering**: when two rooms snap together door-to-door and neither room
-  is selected, both connecting doors are drawn at one shared position — centered on the
-  wall span the two rooms actually share — using the average width of the two doors (the
-  wall reveal and measurements follow), so the pair reads as one clean centered doorway.
-  Selecting either room of the pair shows that room's door with its real measurements
-  while the partner door is drawn dimmed
+  is selected, the two doors are drawn as a single merged door centered on the wall span
+  the rooms share, using the average width of the two doors (the wall reveals and
+  measurements follow), so the pair reads as one clean centered doorway instead of two
+  doors sitting side by side. Selecting either room of the pair shows that room's door
+  with its real measurements while the partner door is drawn dimmed
 
 ### Fixed
 - **Chimney hatch fill** is clipped to the chimney block — the diagonal hatching no
