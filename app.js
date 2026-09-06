@@ -2230,6 +2230,15 @@ function hexToRgba(hex, alpha) {
   return "rgba(" + ((n >> 16) & 255) + "," + ((n >> 8) & 255) + "," + (n & 255) + "," + alpha + ")";
 }
 
+// Perpendicular pixel offset used to draw out-swing doors outside the wall: the
+// whole door symbol is shifted outward by one wall thickness so the closed door
+// rests along the exterior face instead of on the wall centre line. In-swing
+// doors are not offset.
+function doorOutSwingOffsetPx(fx, n, pxScale) {
+  const outPx = fx.swing === "out" ? state.wallThicknessCm * pxScale : 0;
+  return { x: outPx * n.x, y: outPx * n.y };
+}
+
 function doorRenderGeom(r, fx) {
   const pair = doorSnapPair(r, fx);
   if (!pair) return { offsetCm: fx.offsetCm, widthCm: fx.widthCm, dim: 1, colorHex: undefined };
@@ -2435,13 +2444,17 @@ function drawFixture(r, fx, targetCtx, pxScale) {
       targetCtx.stroke();
     }
   } else if (fx.type === "door") {
-    // Door leaf + swing arc on the SAME side of the wall. The hinge sits on the
+    // Door leaf + swing arc on the swing side of the wall. The hinge sits on the
     // trailing ("end") or leading ("start") edge of the opening, and the door
     // swings into the room ("in") or out of it ("out"). The arc runs from the
     // closed position (across the opening, along the wall) to the open position
-    // (perpendicular to the wall), always on the swing side.
+    // (perpendicular to the wall), always on the swing side. Out-swing doors are
+    // offset one wall-thickness to the outside so the closed door rests along the
+    // exterior face of the wall instead of on the wall centre line.
+    const offset = doorOutSwingOffsetPx(fx, n, pxScale);
     const leafLen = Math.hypot(dp2.x - dp1.x, dp2.y - dp1.y);
-    const hinge = fx.hinge === "start" ? dp1 : dp2;
+    const hingeBase = fx.hinge === "start" ? dp1 : dp2;
+    const hinge = { x: hingeBase.x + offset.x, y: hingeBase.y + offset.y };
     const openDirX = fx.swing === "out" ? n.x : -n.x;
     const openDirY = fx.swing === "out" ? n.y : -n.y;
     const leafEnd = { x: hinge.x + openDirX * leafLen, y: hinge.y + openDirY * leafLen };
@@ -2453,8 +2466,8 @@ function drawFixture(r, fx, targetCtx, pxScale) {
     targetCtx.stroke();
     // swing arc from the closed door position to the open door position
     targetCtx.lineWidth = 1;
-    const closeX = hinge === dp2 ? -ux : ux;
-    const closeY = hinge === dp2 ? -uy : uy;
+    const closeX = hingeBase === dp2 ? -ux : ux;
+    const closeY = hingeBase === dp2 ? -uy : uy;
     const startAng = Math.atan2(closeY, closeX);
     const openAng = Math.atan2(openDirY, openDirX);
     const delta = Math.atan2(Math.sin(openAng - startAng), Math.cos(openAng - startAng));

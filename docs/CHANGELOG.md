@@ -60,6 +60,10 @@
   to spot at a glance
 
 ### Fixed
+- **Out-swing doors drawn outside the wall**: a door that opens out of the room is
+  now drawn offset a full wall thickness to the outside (hinge, leaf and swing arc),
+  so the closed door rests along the exterior face instead of on the wall centre line.
+  In-swing doors keep drawing into the room
 - **Snapped door pairing with several doors on one wall**: a door now pairs with the
   aligned door on the facing wall even when that wall hosts multiple doors — previously
   only the first door on the wall was considered, so e.g. a room with two doors on its
