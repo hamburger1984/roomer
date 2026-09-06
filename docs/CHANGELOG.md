@@ -50,6 +50,11 @@
 - **Window board overlap**: the window ledge extends a configurable "Board overlap (cm)"
   beyond the window on both sides (symmetric); the ledge stays selectable over the full
   overhang. Defaults to 3 cm
+- **Snapped door rendering**: when two rooms snap together door-to-door and neither room
+  is selected, each connecting door is drawn centered on its wall with the average width
+  of the two doors (the wall reveal and measurements follow), so the pair reads as one
+  clean centered connection. Selecting either room of the pair shows that room's door
+  with its real measurements while the partner door is drawn dimmed
 
 ### Fixed
 - **Chimney hatch fill** is clipped to the chimney block — the diagonal hatching no

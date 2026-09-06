@@ -2149,6 +2149,58 @@ function snapRoomPosition(room, nx, ny) {
   return { x: px, y: py };
 }
 
+// The room + door a door is snapped to (door-to-door over the shared wall): the
+// other room sits at wall-thickness distance on the door's wall side, has a door
+// on the facing wall, and the two door centers are aligned. Returns null when
+// the door is not part of such a pair.
+function doorSnapPair(r, fx) {
+  if (fx.type !== "door") return null;
+  const T = state.wallThicknessCm;
+  const facing = { left: "right", right: "left", top: "bottom", bottom: "top" }[fx.wall];
+  if (!facing) return null;
+  const myCenter = fx.offsetCm + fx.widthCm / 2;
+  for (const other of state.rooms) {
+    if (other.id === r.id) continue;
+    let gap, overlap;
+    if (fx.wall === "left" || fx.wall === "right") {
+      gap = fx.wall === "left" ? r.x - (other.x + other.widthCm) : other.x - (r.x + r.widthCm);
+      overlap = Math.min(r.y + r.depthCm, other.y + other.depthCm) - Math.max(r.y, other.y);
+    } else {
+      gap = fx.wall === "top" ? r.y - (other.y + other.depthCm) : other.y - (r.y + r.depthCm);
+      overlap = Math.min(r.x + r.widthCm, other.x + other.widthCm) - Math.max(r.x, other.x);
+    }
+    if (Math.abs(gap - T) > 1 || overlap <= T) continue;
+    const otherFx = other.fixtures.find((f) => f.type === "door" && f.wall === facing);
+    if (!otherFx) continue;
+    const otherCenter = otherFx.offsetCm + otherFx.widthCm / 2;
+    const aligned =
+      fx.wall === "left" ? Math.abs(r.y + r.depthCm - myCenter - (other.y + otherCenter)) <= ROOM_DOOR_SNAP_TOLERANCE_CM :
+      fx.wall === "right" ? Math.abs(r.y + myCenter - (other.y + other.depthCm - otherCenter)) <= ROOM_DOOR_SNAP_TOLERANCE_CM :
+      fx.wall === "top" ? Math.abs(r.x + myCenter - (other.x + other.widthCm - otherCenter)) <= ROOM_DOOR_SNAP_TOLERANCE_CM :
+      Math.abs(r.x + r.widthCm - myCenter - (other.x + otherCenter)) <= ROOM_DOOR_SNAP_TOLERANCE_CM;
+    if (!aligned) continue;
+    return { otherRoom: other, otherDoor: otherFx };
+  }
+  return null;
+}
+
+// Effective geometry a door is drawn with. Door-to-door snapped doors are merged
+// when NEITHER room of the pair is selected: each door centers on its wall and
+// uses the average width of both doors. When one room of the pair is selected
+// the selected room's door keeps its real geometry and the other door is dimmed.
+// Non-paired doors render as-is.
+function doorRenderGeom(r, fx) {
+  const pair = doorSnapPair(r, fx);
+  if (!pair) return { offsetCm: fx.offsetCm, widthCm: fx.widthCm, dim: 1 };
+  const thisSel = r.id === state.selectedRoomId;
+  const otherSel = pair.otherRoom.id === state.selectedRoomId;
+  if (thisSel || otherSel) {
+    return { offsetCm: fx.offsetCm, widthCm: fx.widthCm, dim: thisSel ? 1 : 0.35 };
+  }
+  const widthCm = (fx.widthCm + pair.otherDoor.widthCm) / 2;
+  return { offsetCm: Math.max(0, (roomWallLength(r, fx.wall) - widthCm) / 2), widthCm, dim: 1 };
+}
+
 // --- Rendering ---
 
 function drawRoomsLayer(targetCtx, withDims, keepAllDims) {
@@ -2219,9 +2271,12 @@ function drawRoomWall(r, wall, targetCtx, T, pxScale) {
   const ux = (b.x - a.x) / plen;
   const uy = (b.y - a.y) / plen;
   const n = roomWallNormal(r, wall);
-  const openings = r.fixtures.filter(
-    (f) => f.wall === wall && (f.type === "door" || f.type === "window"),
-  );
+  const openings = [];
+  for (const f of r.fixtures) {
+    if (f.wall !== wall || (f.type !== "door" && f.type !== "window")) continue;
+    const eff = f.type === "door" ? doorRenderGeom(r, f) : { offsetCm: f.offsetCm, widthCm: f.widthCm };
+    openings.push({ offsetCm: eff.offsetCm, widthCm: eff.widthCm });
+  }
 
   targetCtx.save();
   targetCtx.lineCap = "butt";
@@ -2280,6 +2335,19 @@ function drawFixture(r, fx, targetCtx, pxScale) {
   const p2 = { x: a.x + ux * o2, y: a.y + uy * o2 };
   const T = cmToPixels(state.wallThicknessCm);
 
+  // Door-to-door snapped doors may render with effective geometry: both doors
+  // merged at the wall center when neither room is selected, or the non-selected
+  // partner door dimmed while the other room is selected
+  let dp1 = p1;
+  let dp2 = p2;
+  let doorColor = color;
+  if (fx.type === "door") {
+    const eff = doorRenderGeom(r, fx);
+    dp1 = { x: a.x + ux * eff.offsetCm * pxScale, y: a.y + uy * eff.offsetCm * pxScale };
+    dp2 = { x: a.x + ux * (eff.offsetCm + eff.widthCm) * pxScale, y: a.y + uy * (eff.offsetCm + eff.widthCm) * pxScale };
+    if (eff.dim < 1) doorColor = "rgba(90,90,95,0.4)";
+  }
+
   targetCtx.save();
   if (fx.type === "window") {
     // opening reveal
@@ -2328,12 +2396,12 @@ function drawFixture(r, fx, targetCtx, pxScale) {
     // swings into the room ("in") or out of it ("out"). The arc runs from the
     // closed position (across the opening, along the wall) to the open position
     // (perpendicular to the wall), always on the swing side.
-    const leafLen = o2 - o1;
-    const hinge = fx.hinge === "start" ? p1 : p2;
+    const leafLen = Math.hypot(dp2.x - dp1.x, dp2.y - dp1.y);
+    const hinge = fx.hinge === "start" ? dp1 : dp2;
     const openDirX = fx.swing === "out" ? n.x : -n.x;
     const openDirY = fx.swing === "out" ? n.y : -n.y;
     const leafEnd = { x: hinge.x + openDirX * leafLen, y: hinge.y + openDirY * leafLen };
-    targetCtx.strokeStyle = color;
+    targetCtx.strokeStyle = doorColor;
     targetCtx.lineWidth = 2;
     targetCtx.beginPath();
     targetCtx.moveTo(hinge.x, hinge.y);
@@ -2341,8 +2409,8 @@ function drawFixture(r, fx, targetCtx, pxScale) {
     targetCtx.stroke();
     // swing arc from the closed door position to the open door position
     targetCtx.lineWidth = 1;
-    const closeX = hinge === p2 ? -ux : ux;
-    const closeY = hinge === p2 ? -uy : uy;
+    const closeX = hinge === dp2 ? -ux : ux;
+    const closeY = hinge === dp2 ? -uy : uy;
     const startAng = Math.atan2(closeY, closeX);
     const openAng = Math.atan2(openDirY, openDirX);
     const delta = Math.atan2(Math.sin(openAng - startAng), Math.cos(openAng - startAng));
@@ -2479,9 +2547,13 @@ function chimneySpanOnWall(r, fx, wall) {
 function wallOccupantSpans(r, wall) {
   const list = [];
   for (const fx of r.fixtures) {
-    const span = fx.type === "chimney"
-      ? chimneySpanOnWall(r, fx, wall)
-      : fx.wall === wall ? { start: fx.offsetCm, end: fx.offsetCm + fx.widthCm } : null;
+    let span = null;
+    if (fx.type === "chimney") {
+      span = chimneySpanOnWall(r, fx, wall);
+    } else if (fx.wall === wall) {
+      const g = fx.type === "door" ? doorRenderGeom(r, fx) : fx;
+      span = { start: g.offsetCm, end: g.offsetCm + g.widthCm };
+    }
     if (span) list.push({ id: fx.id, type: fx.type, start: span.start, end: span.end });
   }
   return list.sort((a, b) => a.start - b.start);
@@ -2514,7 +2586,8 @@ function drawGapOnWall(r, targetCtx, wall, fromCm, toCm, depthOffset, color) {
 
 // Doors/windows/heaters: left gap / width / right gap, staggered inside
 function drawOpeningDimensions(r, fx, targetCtx, T, pxScale) {
-  const color = ROOM_COLORS[fx.type] || "#7f8c8d";
+  const eff = fx.type === "door" ? doorRenderGeom(r, fx) : { offsetCm: fx.offsetCm, widthCm: fx.widthCm, dim: 1 };
+  const color = eff.dim < 1 ? "rgba(90,90,95,0.55)" : ROOM_COLORS[fx.type] || "#7f8c8d";
   const seg = roomWallSegment(r, fx.wall);
   const a = { x: cmToPixels(seg.a.x), y: cmToPixels(seg.a.y) };
   const b = { x: cmToPixels(seg.b.x), y: cmToPixels(seg.b.y) };
@@ -2523,10 +2596,10 @@ function drawOpeningDimensions(r, fx, targetCtx, T, pxScale) {
   const ux = (b.x - a.x) / plen;
   const uy = (b.y - a.y) / plen;
   const n = roomWallNormal(r, fx.wall);
-  const p1 = { x: a.x + ux * fx.offsetCm * pxScale, y: a.y + uy * fx.offsetCm * pxScale };
+  const p1 = { x: a.x + ux * eff.offsetCm * pxScale, y: a.y + uy * eff.offsetCm * pxScale };
   const p2 = {
-    x: a.x + ux * (fx.offsetCm + fx.widthCm) * pxScale,
-    y: a.y + uy * (fx.offsetCm + fx.widthCm) * pxScale,
+    x: a.x + ux * (eff.offsetCm + eff.widthCm) * pxScale,
+    y: a.y + uy * (eff.offsetCm + eff.widthCm) * pxScale,
   };
   // three dims on the inside, staggered: left gap / opening width / right gap
   const in1 = T / 2 + 8;
@@ -2538,11 +2611,11 @@ function drawOpeningDimensions(r, fx, targetCtx, T, pxScale) {
   const pW2 = { x: p2.x - n.x * inW, y: p2.y - n.y * inW };
   const p2d = { x: p2.x - n.x * in2, y: p2.y - n.y * in2 };
   const b2 = { x: b.x - n.x * in2, y: b.y - n.y * in2 };
-  drawRoomDim(targetCtx, a1.x, a1.y, p1d.x, p1d.y, formatLength(fx.offsetCm), color, 6);
-  drawRoomDim(targetCtx, pW1.x, pW1.y, pW2.x, pW2.y, formatLength(fx.widthCm), color, 5);
+  drawRoomDim(targetCtx, a1.x, a1.y, p1d.x, p1d.y, formatLength(eff.offsetCm), color, 6);
+  drawRoomDim(targetCtx, pW1.x, pW1.y, pW2.x, pW2.y, formatLength(eff.widthCm), color, 5);
   drawRoomDim(
     targetCtx, p2d.x, p2d.y, b2.x, b2.y,
-    formatLength(Math.max(0, Math.round(lenCm - fx.offsetCm - fx.widthCm))), color, 6,
+    formatLength(Math.max(0, Math.round(lenCm - eff.offsetCm - eff.widthCm))), color, 6,
   );
 }
 
