@@ -2176,6 +2176,12 @@ function doorSnapPair(r, fx) {
   const facing = { left: "right", right: "left", top: "bottom", bottom: "top" }[fx.wall];
   if (!facing) return null;
   const myCenter = fx.offsetCm + fx.widthCm / 2;
+  const myPos =
+    fx.wall === "left" ? r.y + r.depthCm - myCenter :
+    fx.wall === "right" ? r.y + myCenter :
+    fx.wall === "top" ? r.x + myCenter :
+    r.x + r.widthCm - myCenter;
+  let best = null;
   for (const other of state.rooms) {
     if (other.id === r.id) continue;
     let gap, overlap;
@@ -2187,24 +2193,27 @@ function doorSnapPair(r, fx) {
       overlap = Math.min(r.x + r.widthCm, other.x + other.widthCm) - Math.max(r.x, other.x);
     }
     if (Math.abs(gap - T) > 1 || overlap <= T) continue;
-    const otherFx = other.fixtures.find((f) => f.type === "door" && f.wall === facing);
-    if (!otherFx) continue;
-    const otherCenter = otherFx.offsetCm + otherFx.widthCm / 2;
-    const aligned =
-      fx.wall === "left" ? Math.abs(r.y + r.depthCm - myCenter - (other.y + otherCenter)) <= ROOM_DOOR_SNAP_TOLERANCE_CM :
-      fx.wall === "right" ? Math.abs(r.y + myCenter - (other.y + other.depthCm - otherCenter)) <= ROOM_DOOR_SNAP_TOLERANCE_CM :
-      fx.wall === "top" ? Math.abs(r.x + myCenter - (other.x + other.widthCm - otherCenter)) <= ROOM_DOOR_SNAP_TOLERANCE_CM :
-      Math.abs(r.x + r.widthCm - myCenter - (other.x + otherCenter)) <= ROOM_DOOR_SNAP_TOLERANCE_CM;
-    if (!aligned) continue;
-    return { otherRoom: other, otherDoor: otherFx };
+    // A wall can host several doors, and the aligned partner is not necessarily
+    // the first one listed, so consider every door on the facing wall.
+    for (const otherFx of other.fixtures) {
+      if (otherFx.type !== "door" || otherFx.wall !== facing) continue;
+      const otherCenter = otherFx.offsetCm + otherFx.widthCm / 2;
+      const otherPos =
+        facing === "left" ? other.y + other.depthCm - otherCenter :
+        facing === "right" ? other.y + otherCenter :
+        facing === "top" ? other.x + otherCenter :
+        other.x + other.widthCm - otherCenter;
+      const dist = Math.abs(myPos - otherPos);
+      if (dist <= ROOM_DOOR_SNAP_TOLERANCE_CM && (!best || dist < best.dist)) {
+        best = { otherRoom: other, otherDoor: otherFx, dist };
+      }
+    }
   }
-  return null;
+  return best ? { otherRoom: best.otherRoom, otherDoor: best.otherDoor } : null;
 }
 
-// Effective geometry a door is drawn with. Door-to-door snapped doors are merged
-// when NEITHER room of the pair is selected: each door centers on its wall and
-// uses the average width of both doors. When one room of the pair is selected
-// the selected room's door keeps its real geometry and the other door is dimmed.
+// Effective geometry a door is drawn with: snapped doors keep their real
+// position and size; while the pair's OTHER room is selected the door is dimmed.
 // Non-paired doors render as-is.
 // Color shared by the two doors of a snapped connection. Chosen deterministically
 // (hashed from the two room ids, order-independent) so the pair renders in the same

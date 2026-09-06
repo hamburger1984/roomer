@@ -60,6 +60,11 @@
   to spot at a glance
 
 ### Fixed
+- **Snapped door pairing with several doors on one wall**: a door now pairs with the
+  aligned door on the facing wall even when that wall hosts multiple doors — previously
+  only the first door on the wall was considered, so e.g. a room with two doors on its
+  bottom wall only ever snapped its FIRST door to the room below, and the room below
+  couldn't snap back to the aligned door behind it
 - **Chimney hatch fill** is clipped to the chimney block — the diagonal hatching no
   longer bleeds past the chimney's dimensions
 - **Chimney corner measurements** run along the two walls the corner sits on instead of
