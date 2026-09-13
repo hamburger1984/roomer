@@ -298,6 +298,40 @@
           >
             <h2 id="room-heading" class="sr-only">Room editor</h2>
             <h3 id="roomHeading" class="measure-title">🏠 Rooms</h3>
+            <div class="measure-brand">
+              <span class="measure-brand-label">Floor plan builder</span>
+              <input
+                id="floorplanName"
+                type="text"
+                value="Floor plan"
+                aria-label="Floor plan name"
+              />
+            </div>
+            <div class="measure-actions">
+              <button id="newFloorplanBtn" class="btn measure-btn" aria-label="Start a new floor plan">
+                ＋ New
+              </button>
+              <button id="floorplanToFurniture" class="btn measure-btn" aria-label="Start a furniture project from this floor plan">
+                ↗ Furniture
+              </button>
+              <button id="exportFloorplanJson" class="btn measure-btn" aria-label="Export floor plan as JSON">
+                ⬇ JSON
+              </button>
+              <button id="exportFloorplanPdf" class="btn measure-btn" aria-label="Export floor plan as PDF">
+                📄 PDF
+              </button>
+              <button id="importFloorplanJson" class="btn measure-btn" aria-label="Import floor plan from JSON">
+                ⬆ Import
+              </button>
+              <input
+                id="floorplanImportInput"
+                type="file"
+                accept=".json,application/json"
+                class="panel-hidden"
+                aria-label="Import floor plan JSON file"
+              />
+            </div>
+            <div id="floorplanList" class="obstacle-list" role="list" aria-label="Saved floor plans"></div>
             <label class="measure-scale-label" for="wallThickness">
               Wall thickness (cm):
               <input

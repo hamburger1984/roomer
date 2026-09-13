@@ -298,6 +298,14 @@ const TRANSLATIONS = {
       swingOut: "Out of the room",
       roomName: "Room name",
     },
+    floorplan: {
+      rooms: "rooms",
+      deleteConfirm: "Delete this floor plan?",
+      importSuccess: "Floor plan imported.",
+      importInvalid: "Invalid floor plan data.",
+      scaleBar: "Scale bar",
+      toFurniture: "→ Furniture project",
+    },
   },
 
   de: {
@@ -597,6 +605,14 @@ const TRANSLATIONS = {
       swingIn: "in den Raum",
       swingOut: "aus dem Raum",
       roomName: "Raumname",
+    },
+    floorplan: {
+      rooms: "Räume",
+      deleteConfirm: "Diesen Grundriss löschen?",
+      importSuccess: "Grundriss importiert.",
+      importInvalid: "Ungültige Grundriss-Daten.",
+      scaleBar: "Maßstabsleiste",
+      toFurniture: "→ Einrichtungsprojekt",
     },
   },
 };

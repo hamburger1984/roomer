@@ -1,5 +1,45 @@
 # Changelog
 
+## Version 1.14 - Room Planner and Floor Plan Builder separated (September 2026)
+
+### Added
+- **The floor plan builder (🏠) is a separate workspace**: parametric rooms (and their
+  wall thickness) no longer live inside a furniture project. The 🏠 button opens a
+  blank grid you own independently of the furniture planner (uploaded floor plan image,
+  calibration or furniture), so both tools never step on each other's data. Saved room
+  plans made before this version are migrated automatically into the new floor plan
+  store when their project is opened
+- **Per-floor-plan storage**: the builder keeps its own floor plan documents (name,
+  wall thickness, rooms) in the browser, with a list of saved floor plans that can be
+  renamed, switched, and deleted. The name field, "＋ New", saving/loading and storage
+  are fully independent of the furniture project
+- **Export floor plan as JSON**: downloads the floor plan document (data only — name,
+  wall thickness, rooms) for archiving or sending
+- **Import floor plan from JSON**: loads a previously exported JSON file into the
+  builder (validates the payload and rejects malformed data)
+- **Export floor plan as PDF**: a single A4 page with the plan drawn into it and the
+  floor plan name as caption — generated with a small hand-rolled PDF writer (embedding
+  the drawing as a JPEG), so no extra library is needed
+- **Export floor plan as PNG** keeps working and now comes from the shared export
+  canvas (grid + rooms + caption), used by both the PNG and PDF paths
+- **Scale legend on exports**: every PNG/PDF export of the floor plan carries a
+  scale ruler drawn at the plan's own pixels-per-meter scale (a "0 → 50 cm →
+  1 m …" bar with tick marks), so a printed/exported plan can be used in a
+  furniture project to find the correct scale: draw the calibration line between
+  two ruler marks and enter the labelled length
+- **→ Furniture project**: a one-click handoff in the floor plan builder that
+  renders the current parametric plan at its exact scale, creates a furniture
+  project from it and pre-sets the pixels-per-meter value — furniture can be
+  placed without any manual calibration
+
+### Changed
+- Furniture projects (uploaded plan, calibration, furniture) no longer contain rooms:
+  `saveProject`/`exportProject` serialize furniture/snapshots only
+- Opening a project no longer force-enters the room editor; legacy projects with rooms
+  migrate those rooms into the floor plan store instead
+- The parametric floor plan render shows its own blank grid even when a furniture
+  project with a floor plan image is open
+
 ## Version 1.13 - Light/Dark/Auto Theme (September 2026)
 
 ### Added

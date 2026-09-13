@@ -536,6 +536,39 @@ header h1 {
   background: var(--color-danger-dark);
 }
 
+/* Floor plan builder: name row + saved floor plan list inside the room panel */
+.measure-brand {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+  margin-bottom: var(--spacing-sm);
+}
+
+.measure-brand-label {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-gray);
+}
+
+#floorplanName {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-input-bg);
+  color: var(--color-text);
+  font-size: 0.95rem;
+}
+
+#floorplanList {
+  margin-bottom: var(--spacing-sm);
+}
+
+.floorplan-item.active {
+  outline: 2px solid var(--color-primary);
+}
+
 .calibration-panel {
   position: absolute;
   bottom: 5rem;

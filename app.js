@@ -384,10 +384,12 @@ const state = {
   cropMode: false,
   cropStart: null,
   cropEnd: null,
-  // Room editor (parametric floor plans)
+  // Room editor (parametric floor plans — stored separately from projects)
   roomEditorMode: false,
   rooms: [],
   wallThicknessCm: DEFAULT_WALL_THICKNESS_CM,
+  floorplanName: "Floor plan",
+  floorplanId: null,
   selectedRoomId: null,
   selectedWall: null,
   selectedFixtureId: null,
@@ -760,7 +762,7 @@ function undo() {
   }
   markChanges();
   render();
-  saveProject();
+  saveFloorplan(); saveProject();
 }
 
 // Redo the last undone action
@@ -780,7 +782,7 @@ function redo() {
   }
   markChanges();
   render();
-  saveProject();
+  saveFloorplan(); saveProject();
 }
 
 // Update undo/redo button states
@@ -836,10 +838,12 @@ function startBlankProject() {
   updateUndoRedoButtons();
   updateSelectedFurniturePanel();
   saveProject();
+  // Start a fresh floor plan document for the blank board (stored separately)
+  newFloorplan();
   renderProjectList();
   render();
 
-  // Open the room editor so the construction grid is visible immediately
+  // Open the floor plan creator so the construction grid is visible immediately
   startRoomEditorMode();
 }
 
@@ -996,6 +1000,8 @@ function init() {
   setupEventListeners();
   renderFurnitureLibrary();
   loadProject();
+  // Restore the last-used parametric floor plan (rooms/walls) into the editor
+  const restoredPlan = loadCurrentFloorplan();
   resizeCanvas();
   render();
   updateScaleDisplay();
@@ -1003,9 +1009,25 @@ function init() {
   renderSnapshotGraph();
   updateUndoRedoButtons();
 
+  // When only a floor plan is restored (no furniture project), jump straight
+  // into the room editor so the rooms are selectable/movable/deletable instead
+  // of being drawn as a non-interactive picture.
+  if (
+    (restoredPlan || state.rooms.length) &&
+    !state.floorPlanImage &&
+    !state.furniture.length
+  ) {
+    startRoomEditorMode();
+  }
+
   // Show upload overlay only if there is no content at all (no floor plan,
   // no rooms, no furniture) – stored room plans must be visible right away
-  if (!state.floorPlanImage && !state.rooms.length && !state.furniture.length) {
+  if (
+    !state.roomEditorMode &&
+    !state.floorPlanImage &&
+    !state.rooms.length &&
+    !state.furniture.length
+  ) {
     showUploadOverlay();
   }
 }
@@ -1113,14 +1135,55 @@ function setupEventListeners() {
 
   // Room editor
   document.getElementById("roomBtn").addEventListener("click", toggleRoomEditorMode);
-  const wtInput = document.getElementById("wallThickness");
-  if (wtInput) wtInput.addEventListener("change", (e) => setWallThickness(e.target.value));
+  const floorplanNameInput = document.getElementById("floorplanName");
+  if (floorplanNameInput) {
+    floorplanNameInput.addEventListener("change", () => {
+      state.floorplanName = floorplanNameInput.value.trim() || "Floor plan";
+      renderFloorplanList();
+      saveFloorplan();
+    });
+  }
+  const newFloorplanBtn = document.getElementById("newFloorplanBtn");
+  if (newFloorplanBtn) newFloorplanBtn.addEventListener("click", newFloorplan);
+  const floorplanToFurniture = document.getElementById("floorplanToFurniture");
+  if (floorplanToFurniture) {
+    floorplanToFurniture.addEventListener("click", startFurnitureProjectFromFloorplan);
+  }
+  const exportFloorplanJson = document.getElementById("exportFloorplanJson");
+  if (exportFloorplanJson) {
+    exportFloorplanJson.addEventListener("click", () => {
+      exportFloorplanAsJson();
+    });
+  }
+  const exportFloorplanPdf = document.getElementById("exportFloorplanPdf");
+  if (exportFloorplanPdf) {
+    exportFloorplanPdf.addEventListener("click", () => {
+      exportFloorplanAsPdf();
+    });
+  }
+  const floorplanImportInput = document.getElementById("floorplanImportInput");
+  if (floorplanImportInput) {
+    floorplanImportInput.addEventListener("change", (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      importFloorplanFile(file);
+      floorplanImportInput.value = "";
+    });
+  }
+  const importFloorplanJson = document.getElementById("importFloorplanJson");
+  if (importFloorplanJson) {
+    importFloorplanJson.addEventListener("click", () => {
+      floorplanImportInput.click();
+    });
+  }
+  const wallThicknessInput = document.getElementById("wallThickness");
+  if (wallThicknessInput) wallThicknessInput.addEventListener("change", (e) => setWallThickness(e.target.value));
   const addRoomBtn = document.getElementById("addRoomBtn");
   if (addRoomBtn) addRoomBtn.addEventListener("click", addDefaultRoom);
   const exportRoomImage = document.getElementById("exportRoomImage");
   if (exportRoomImage) {
     exportRoomImage.addEventListener("click", () => {
-      exportMeasurementImage();
+      exportFloorplanAsPng();
     });
   }
   const clearRoomsBtn = document.getElementById("clearRooms");
@@ -1498,6 +1561,10 @@ function startRoomEditorMode() {
   if (state.calibrationMode) cancelCalibration();
   if (state.cropMode) cancelCrop();
 
+  // The floor plan creator always works on a floor plan document of its own. If
+  // none has been created or restored yet, start from a fresh empty one.
+  if (!localStorage.getItem(FLOORPLAN_CURRENT)) newFloorplan();
+
   hideUploadOverlay();
 
   state.roomEditorMode = true;
@@ -1608,7 +1675,7 @@ function addRoom(x, y, widthCm, depthCm, ceilingHeightCm) {
   state.selectedWall = "top";
   state.selectedFixtureId = null;
   markChanges();
-  saveProject();
+  saveFloorplan();
   renderRoomPanel();
   render();
   return room;
@@ -1644,7 +1711,7 @@ function deleteRoom(id) {
     state.selectedFixtureId = null;
   }
   markChanges();
-  saveProject();
+  saveFloorplan();
   renderRoomPanel();
   render();
 }
@@ -1658,7 +1725,7 @@ function clearRooms() {
   state.selectedWall = null;
   state.selectedFixtureId = null;
   markChanges();
-  saveProject();
+  saveFloorplan();
   renderRoomPanel();
   render();
 }
@@ -1680,7 +1747,7 @@ function updateRoomField(id, field, value) {
     }
   });
   markChanges();
-  saveProject();
+  saveFloorplan();
   renderRoomPanel();
   render();
 }
@@ -1691,7 +1758,7 @@ function renameRoom(id, name) {
   pushUndoState();
   r.name = (name || "").trim();
   markChanges();
-  saveProject();
+  saveFloorplan();
   renderRoomPanel();
   render();
 }
@@ -1701,7 +1768,7 @@ function setWallThickness(value) {
   if (!Number.isFinite(cm) || cm <= 0) return;
   state.wallThicknessCm = cm;
   markChanges();
-  saveProject();
+  saveFloorplan();
   renderRoomPanel();
   render();
 }
@@ -1743,7 +1810,7 @@ function addFixture(roomId, wall, type) {
   state.selectedWall = fx.wall === "corner" ? state.selectedWall : wall;
   state.selectedFixtureId = fx.id;
   markChanges();
-  saveProject();
+  saveFloorplan();
   renderRoomPanel();
   render();
 }
@@ -1757,7 +1824,7 @@ function deleteFixture(roomId, fiscalId) {
   r.fixtures.splice(idx, 1);
   if (state.selectedFixtureId === fiscalId) state.selectedFixtureId = null;
   markChanges();
-  saveProject();
+  saveFloorplan();
   renderRoomPanel();
   render();
 }
@@ -1783,7 +1850,7 @@ function setDoorOption(roomId, fixtureId, field, value) {
     fx.swing = swing;
     fx.hinge = hinge;
     markChanges();
-    saveProject();
+    saveFloorplan();
     renderRoomPanel();
     render();
     return;
@@ -1794,7 +1861,7 @@ function setDoorOption(roomId, fixtureId, field, value) {
   pushUndoState();
   fx[field] = value;
   markChanges();
-  saveProject();
+  saveFloorplan();
   renderRoomPanel();
   render();
 }
@@ -1810,7 +1877,7 @@ function updateFixtureField(roomId, fiscalId, field, value) {
     if (cm < 0) return;
     fx.boardOverlapCm = cm;
     markChanges();
-    saveProject();
+    saveFloorplan();
     renderRoomPanel();
     render();
     return;
@@ -1819,7 +1886,7 @@ function updateFixtureField(roomId, fiscalId, field, value) {
     if (cm < 0) return;
     fx.doorWidthCm = Math.min(cm, fx.widthCm);
     markChanges();
-    saveProject();
+    saveFloorplan();
     renderRoomPanel();
     render();
     return;
@@ -1836,7 +1903,7 @@ function updateFixtureField(roomId, fiscalId, field, value) {
     fx.offsetCm = Math.min(fx.offsetCm, Math.max(0, len - fx.widthCm));
   }
   markChanges();
-  saveProject();
+  saveFloorplan();
   renderRoomPanel();
   render();
 }
@@ -2068,7 +2135,7 @@ function moveFixtureDragTo(canvasPoint) {
 function endFixtureDrag() {
   if (state.draggingFixture) {
     markChanges();
-    saveProject();
+    saveFloorplan();
   }
   state.draggingFixture = null;
   state.fixtureDragStart = null;
@@ -2096,7 +2163,7 @@ function moveRoomDragTo(canvasPoint) {
 }
 
 function endRoomDrag() {
-  if (state.draggingRoomId) saveProject();
+  if (state.draggingRoomId) saveFloorplan();
   state.draggingRoomId = null;
   state.roomDragGrab = null;
 }
@@ -2945,6 +3012,7 @@ function renderRoomPanel() {
   const wt = document.getElementById("wallThickness");
   if (wt) wt.value = Math.round(state.wallThicknessCm * 10) / 10;
 
+  renderFloorplanList();
   renderRoomList();
   renderRoomDetail();
 
@@ -3152,36 +3220,26 @@ function renderFixtureList() {
   });
 }
 
-// Export the floor plan + rooms as a PNG image
-function exportMeasurementImage() {
-  const hasPlan = !!state.floorPlanImage;
-  if (!hasPlan && state.rooms.length === 0) {
-    alert(t("room.noDataToExport"));
-    return;
-  }
+// Draw the parametric floor plan (construction grid + rooms, every measurement)
+// onto its own off-screen canvas, sized to fit within export limits. Returns
+// null when there is nothing to draw.
+function buildPlanCanvas() {
+  if (!state.rooms.length) return null;
 
   let bx1 = Infinity;
   let by1 = Infinity;
   let bx2 = -Infinity;
   let by2 = -Infinity;
-  if (state.rooms.length) {
-    const ex = (state.pixelsPerMeter || DEFAULT_MEASURE_SCALE) / 100;
-    // include the wall band, which extends the wall thickness OUTSIDE the room
-    const wt = state.wallThicknessCm * ex;
-    state.rooms.forEach((r) => {
-      bx1 = Math.min(bx1, r.x * ex - wt);
-      by1 = Math.min(by1, r.y * ex - wt);
-      bx2 = Math.max(bx2, (r.x + r.widthCm) * ex + wt);
-      by2 = Math.max(by2, (r.y + r.depthCm) * ex + wt);
-    });
-  }
-  if (hasPlan) {
-    bx1 = Math.min(bx1, 0);
-    by1 = Math.min(by1, 0);
-    bx2 = Math.max(bx2, state.floorPlanImage.width);
-    by2 = Math.max(by2, state.floorPlanImage.height);
-  }
-  if (!Number.isFinite(bx1)) return;
+  const ex = (state.pixelsPerMeter || DEFAULT_MEASURE_SCALE) / 100;
+  // include the wall band, which extends the wall thickness OUTSIDE the room
+  const wt = state.wallThicknessCm * ex;
+  state.rooms.forEach((r) => {
+    bx1 = Math.min(bx1, r.x * ex - wt);
+    by1 = Math.min(by1, r.y * ex - wt);
+    bx2 = Math.max(bx2, (r.x + r.widthCm) * ex + wt);
+    by2 = Math.max(by2, (r.y + r.depthCm) * ex + wt);
+  });
+  if (!Number.isFinite(bx1)) return null;
 
   const pad = 60;
   const bw = bx2 - bx1;
@@ -3189,7 +3247,7 @@ function exportMeasurementImage() {
   const scale = Math.min(1, 3800 / Math.max(bw, bh, 1));
 
   const W = Math.max(2, Math.ceil((bw + pad * 2) * scale));
-  const H = Math.max(2, Math.ceil((bh + pad * 2) * scale) + 32);
+  const H = Math.max(2, Math.ceil((bh + pad * 2) * scale));
 
   const exportCanvas = document.createElement("canvas");
   exportCanvas.width = W;
@@ -3203,59 +3261,456 @@ function exportMeasurementImage() {
   octx.scale(scale, scale);
   octx.translate(pad - bx1, pad - by1);
 
-  if (!hasPlan) {
-    drawMeasureGrid(octx, {
-      s: 1,
-      ox: 0,
-      oy: 0,
-      x0: bx1 - pad,
-      y0: by1 - pad,
-      x1: bx2 + pad,
-      y1: by2 + pad,
-    });
-  } else {
-    octx.drawImage(state.floorPlanImage, 0, 0);
-  }
+  drawMeasureGrid(octx, {
+    s: 1,
+    ox: 0,
+    oy: 0,
+    x0: bx1 - pad,
+    y0: by1 - pad,
+    x1: bx2 + pad,
+    y1: by2 + pad,
+  });
   // Export keeps measurements for every room
   drawRoomsLayer(octx, true, true);
   octx.restore();
 
-  // Caption bar with project and scale info
-  const ppm = state.pixelsPerMeter || DEFAULT_MEASURE_SCALE;
-  octx.fillStyle = "#2c3e50";
-  octx.font = "bold 14px sans-serif";
-  octx.textAlign = "left";
-  octx.textBaseline = "alphabetic";
-  octx.fillText(
-    `${state.projectName}  ·  ${Math.round(ppm)} px/m`,
-    12,
-    18,
-  );
-
-  const dateStr = new Date().toLocaleString(getCurrentLocale(), {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-  octx.fillStyle = "#7f8c8d";
-  octx.font = "10px sans-serif";
-  octx.textAlign = "right";
-  octx.fillText(dateStr, W - 8, H - 6);
-
-  exportCanvas.toBlob((blob) => {
-    if (!blob) return;
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `Maßplan-${state.projectName.replace(/[^\w\-]+/g, "_")}.png`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }, "image/png");
+  return exportCanvas;
 }
 
-// Extract scale from PDF text
+const SCALE_BAR_OPTIONS = [
+  { cm: 50 },
+  { cm: 100 },
+  { cm: 200 },
+  { cm: 250 },
+  { cm: 500 },
+  { cm: 1000 },
+];
+
+// Pick the longest "nice" scale-bar length (50 cm, 1 m, 2 m, …) that fits in the
+// available pixel width at the current pixels-per-meter scale.
+function pickScaleBarLength(ppm, availPx) {
+  const fits = SCALE_BAR_OPTIONS.filter(
+    (o) => (o.cm / 100) * ppm <= availPx,
+  );
+  const best = fits.length ? fits[fits.length - 1] : SCALE_BAR_OPTIONS[0];
+  return { cm: best.cm, barPx: Math.round((best.cm / 100) * ppm) };
+}
+
+// Tick marks in cm across the scale bar: a "nice" step (10/20/25/50/100 cm) that
+// divides the bar length, stays at least ~30 px wide at the current scale and
+// lands as close as possible to a comfortable ~44 px spacing.
+function scaleBarTicks(cm, ppm) {
+  const steps = [10, 20, 25, 50, 100];
+  const dividing = steps.filter((s) => cm % s === 0);
+  const wide = dividing.filter((s) => (s / 100) * ppm >= 30);
+  const candidates = wide.length ? wide : dividing;
+  let best = candidates[0];
+  let bestScore = Infinity;
+  for (const s of candidates) {
+    const score = Math.abs((s / 100) * ppm - 44);
+    if (score < bestScore) {
+      bestScore = score;
+      best = s;
+    }
+  }
+  const n = Math.round(cm / best);
+  return Array.from({ length: n + 1 }, (_, i) => i * best);
+}
+
+// Label for a scale-bar tick: "50 cm", "1 m", "2 m", …
+function formatScaleLabel(cm) {
+  if (cm >= 100 && cm % 100 === 0) return cm / 100 + " m";
+  return cm + " cm";
+}
+
+// Build an off-screen canvas of the parametric floor plan plus a caption strip
+// and a scale legend (a ruler drawn at the plan's own scale, used to find the
+// correct scale when the exported image is brought into a furniture project).
+// Returns null when there is nothing to draw.
+function buildRoomExportCanvas(opts = {}) {
+  const { includeCaption = true, includeLegend = true } = opts;
+  const base = buildPlanCanvas();
+  if (!base) return null;
+
+  const CAPTION_H = 32;
+  const LEGEND_H = 46;
+  let extra = 0;
+  if (includeCaption) extra += CAPTION_H;
+  if (includeLegend) extra += LEGEND_H;
+
+  const W = base.width;
+  const H = base.height + extra;
+  const exportCanvas = document.createElement("canvas");
+  exportCanvas.width = W;
+  exportCanvas.height = H;
+  const octx = exportCanvas.getContext("2d");
+
+  octx.fillStyle = "#ffffff";
+  octx.fillRect(0, 0, W, H);
+  octx.drawImage(base, 0, 0);
+
+  const ppm = state.pixelsPerMeter || DEFAULT_MEASURE_SCALE;
+  let penY = base.height;
+
+  if (includeCaption) {
+    // Caption bar with the floor plan name and scale info
+    octx.fillStyle = "#2c3e50";
+    octx.font = "bold 14px sans-serif";
+    octx.textAlign = "left";
+    octx.textBaseline = "alphabetic";
+    octx.fillText(
+      `${state.floorplanName || "Floor plan"}  ·  ${Math.round(ppm)} px/m`,
+      12,
+      penY + 13,
+    );
+
+    const dateStr = new Date().toLocaleString(getCurrentLocale(), {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    octx.fillStyle = "#7f8c8d";
+    octx.font = "10px sans-serif";
+    octx.textAlign = "right";
+    octx.fillText(dateStr, W - 8, penY + 26);
+    penY += CAPTION_H;
+  }
+
+  if (includeLegend) {
+    // Legend: a ruler whose physical length is known at the plan's scale
+    const margin = 24;
+    const leg = pickScaleBarLength(ppm, W - margin * 2);
+    const ticks = scaleBarTicks(leg.cm, ppm);
+    const barLenPx = (leg.cm / 100) * ppm;
+    const x0 = Math.floor((W - barLenPx) / 2);
+    const yBar = penY + 28; // top of the bar strokes
+    const yText = penY + 13; // legend label baseline
+
+    octx.fillStyle = "#2c3e50";
+    octx.font = "bold 12px sans-serif";
+    octx.textAlign = "left";
+    octx.textBaseline = "alphabetic";
+    octx.fillText(t("floorplan.scaleBar"), margin, yText);
+
+    // bar body
+    octx.fillStyle = "#2c3e50";
+    octx.fillRect(x0, yBar, barLenPx, 3);
+
+    // ticks + labels
+    octx.strokeStyle = "#2c3e50";
+    octx.lineWidth = 1;
+    octx.beginPath();
+    ticks.forEach((tickCm) => {
+      const x = x0 + (tickCm / leg.cm) * barLenPx;
+      octx.moveTo(x, yBar - 7);
+      octx.lineTo(x, yBar + 3);
+    });
+    octx.stroke();
+
+    octx.font = "10px sans-serif";
+    octx.textAlign = "center";
+    octx.fillStyle = "#2c3e50";
+    ticks.forEach((tickCm) => {
+      const x = x0 + (tickCm / leg.cm) * barLenPx;
+      let label = formatScaleLabel(tickCm);
+      // skip the 0 label when the first labelled tick would collide with it
+      if (tickCm === 0 && ticks.length > 2) label = "";
+      octx.fillText(label, x, yBar + 15);
+    });
+  }
+
+  return exportCanvas;
+}
+
+function floorplanFileName(ext) {
+  return (state.floorplanName || "floorplan").replace(/[^\w\-]+/g, "_") + "." + ext;
+}
+
+// Trigger a download from a data URL (no blob needed)
+function downloadCanvasDataUrl(dataUrl, filename) {
+  const a = document.createElement("a");
+  a.href = dataUrl;
+  a.download = filename;
+  a.click();
+}
+
+// Download the parametric floor plan as a PNG image
+function exportFloorplanAsPng() {
+  const canvas = buildRoomExportCanvas();
+  if (!canvas) {
+    alert(t("room.noDataToExport"));
+    return;
+  }
+  downloadCanvasDataUrl(
+    canvas.toDataURL("image/png"),
+    floorplanFileName("png"),
+  );
+}
+
+// Start a furniture project from the current floor plan: the parametric plan is
+// rendered at its own pixels-per-meter scale and handed over as the project's
+// floor plan image with that scale pre-set, so furniture can be placed without
+// re-calibrating. Returns false when there is nothing to hand over.
+function startFurnitureProjectFromFloorplan() {
+  const plan = buildPlanCanvas();
+  if (!plan) {
+    alert(t("room.noDataToExport"));
+    return false;
+  }
+  const dataUrl = plan.toDataURL("image/png");
+  const img = new Image();
+  state.floorPlan = dataUrl;
+  state.floorPlanImage = img;
+  state.pixelsPerMeter = state.pixelsPerMeter || DEFAULT_MEASURE_SCALE;
+  state.projectName = state.floorplanName || "Untitled Project";
+  state.furniture = [];
+  state.snapshotGraph = [];
+  state.currentSnapshotId = null;
+  state.draggingRoomId = null;
+  state.draggingFixture = null;
+  updateProjectNameDisplay();
+  exitRoomEditorMode();
+
+  img.onload = () => {
+    canvas.width = img.width;
+    canvas.height = img.height;
+    resizeCanvas();
+    fitToView();
+    render();
+    updateScaleDisplay();
+    saveProject();
+  };
+  img.src = dataUrl;
+  hideUploadOverlay();
+  resizeCanvas();
+  render();
+  return true;
+}
+
+// Download the parametric floor plan document as JSON (data only)
+function exportFloorplanAsJson() {
+  const json = JSON.stringify(buildFloorplanJSON(), null, 2);
+  downloadCanvasDataUrl(
+    "data:application/json;charset=utf-8," + encodeURIComponent(json),
+    floorplanFileName("json"),
+  );
+}
+
+// Download the parametric floor plan as a single-page PDF (image + caption)
+function exportFloorplanAsPdf() {
+  const canvas = buildRoomExportCanvas();
+  if (!canvas) {
+    alert(t("room.noDataToExport"));
+    return;
+  }
+  const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+  const jpeg = decodeBase64ToBytes(dataUrl.split(",")[1] || "");
+  const pdfBytes = buildPdfBytesFromJpeg(jpeg, {
+    widthPx: canvas.width,
+    heightPx: canvas.height,
+    caption: state.floorplanName || "Floor plan",
+  });
+  const blob = new Blob([pdfBytes], { type: "application/pdf" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = floorplanFileName("pdf");
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// Read and apply an imported floor plan JSON file
+function importFloorplanFile(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const parsed = parseFloorplanJSON(reader.result);
+      state.floorplanName = parsed.name;
+      state.wallThicknessCm = parsed.wallThicknessCm;
+      state.rooms = parsed.rooms;
+      state.floorplanId = null; // imported floor plans get a fresh identity
+      state.selectedRoomId = null;
+      state.selectedWall = null;
+      state.selectedFixtureId = null;
+      updateFloorplanInputs();
+      saveFloorplan();
+      renderRoomPanel();
+      render();
+      alert(t("floorplan.importSuccess"));
+    } catch (e) {
+      alert(t("floorplan.importInvalid"));
+    }
+  };
+  reader.onerror = () => alert(t("floorplan.importInvalid"));
+  reader.readAsText(file);
+}
+
+// Sync the floor plan name / wall thickness inputs with the editor state
+function updateFloorplanInputs() {
+  const n = document.getElementById("floorplanName");
+  if (n) n.value = state.floorplanName || "Floor plan";
+  const w = document.getElementById("wallThickness");
+  if (w) w.value = String(state.wallThicknessCm);
+}
+
+// ---- Minimal single-page PDF export (hand-rolled, no external library) ----
+// Re-encodes the exported floor plan PNG as a JPEG, wraps it in a DCTDecode
+// image XObject and emits a single-page A4 PDF. A tiny pure-JS base64 decoder
+// keeps this testable in the Node harness.
+
+const PDF_BASE64_CHARS =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+// Decode a base64 string to bytes without relying on browser APIs
+function decodeBase64ToBytes(b64) {
+  const clean = String(b64).replace(/\s/g, "");
+  const out = new Uint8Array(Math.floor((clean.length * 3) / 4));
+  let p = 0;
+  for (let i = 0; i < clean.length && clean[i] !== "="; i += 4) {
+    const c0 = PDF_BASE64_CHARS.indexOf(clean[i]);
+    const c1 = PDF_BASE64_CHARS.indexOf(clean[i + 1]);
+    const c2 = clean[i + 2] === "=" || clean[i + 2] === undefined ? -1 : PDF_BASE64_CHARS.indexOf(clean[i + 2]);
+    const c3 = clean[i + 3] === "=" || clean[i + 3] === undefined ? -1 : PDF_BASE64_CHARS.indexOf(clean[i + 3]);
+    if (c0 < 0 || c1 < 0) break;
+    out[p++] = (c0 << 2) | (c1 >> 4);
+    if (c2 >= 0) out[p++] = ((c1 & 15) << 4) | (c2 >> 2);
+    if (c3 >= 0) out[p++] = ((c2 & 3) << 6) | c3;
+  }
+  return out.subarray(0, p);
+}
+
+// Decode a base64url string (URL-safe alphabet) to bytes
+function decodeBase64UrlToBytes(b64) {
+  return decodeBase64ToBytes(String(b64).replace(/-/g, "+").replace(/_/g, "/"));
+}
+
+// Escape a string for use inside a PDF literal string / Tj operator
+function pdfEscapeString(str) {
+  return String(str)
+    .replace(/[^\x20-\x7e]/g, "?")
+    .replace(/([()\\])/g, "\\$1");
+}
+
+// Tiny byte-builder helper: appends UTF-8 text or raw bytes, recording offsets.
+function byteBuilder() {
+  const enc = new TextEncoder();
+  let bytes = [];
+  let offsets = [];
+  let push = (arr) => {
+    offsets.push(bytes.length);
+    for (let i = 0; i < arr.length; i++) bytes.push(arr[i]);
+  };
+  return {
+    text(s) {
+      offsets.push(bytes.length);
+      const e = enc.encode(s);
+      for (let i = 0; i < e.length; i++) bytes.push(e[i]);
+    },
+    raw(arr) {
+      push(arr);
+      return offsets[offsets.length - 1];
+    },
+    push,
+    get length() {
+      return bytes.length;
+    },
+    end() {
+      return new Uint8Array(bytes);
+    },
+    lastOffset() {
+      return offsets[offsets.length - 1];
+    },
+  };
+}
+
+// Build a single-page A4 PDF containing the given JPEG image (DCTDecode) and a
+// caption line. Returns a Uint8Array with the finished PDF file bytes.
+function buildPdfBytesFromJpeg(jpeg, dims) {
+  const enc = new TextEncoder();
+  const W = Math.round(dims.widthPx);
+  const H = Math.round(dims.heightPx);
+  const caption = pdfEscapeString(dims.caption || dims.name || "Floor plan");
+
+  const pageW = 595.28; // A4 portrait width in points
+  const pageH = 841.89; // A4 portrait height in points
+  const margin = 40;
+  const availW = pageW - margin * 2;
+  const availH = pageH - margin * 2 - 22; // leave room for the caption line
+  const fit = Math.min(availW / W, availH / H, 1);
+  const dw = W * fit;
+  const dh = H * fit;
+  const ix = (pageW - dw) / 2;
+  const iy = (pageH - dh) / 2;
+
+  const content = [
+    "q",
+    `${ix} ${iy} ${dw} ${dh} re W n`,
+    `${dw} 0 0 ${dh} ${ix} ${iy} cm`,
+    "/Im0 Do",
+    "Q",
+    "BT",
+    "/F1 11 Tf",
+    "0.10 0.10 0.10 rg",
+    `${margin} 16 Td`,
+    `(${caption}) Tj`,
+    "ET",
+    "",
+  ].join("\n");
+  const contentEnc = enc.encode(content);
+
+  // Assemble the file, writing each object and recording its byte offset.
+  const bb = byteBuilder();
+  bb.text("%PDF-1.4\n%\u00e2\u00e3\u00cf\u00d3\n");
+
+  const objOffsets = [];
+  const emit = (body) => {
+    bb.text((objOffsets.length + 1) + " 0 obj\n");
+    objOffsets.push(bb.lastOffset());
+    bb.text(body);
+    bb.text("\nendobj\n");
+  };
+
+  emit("<< /Type /Catalog /Pages 2 0 R >>");
+  emit("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+  emit(
+    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW} ${pageH}]` +
+      " /Resources << /ProcSet [/PDF /Text /ImageC] /XObject << /Im0 5 0 R >>" +
+      " /Font << /F1 4 0 R >> >> /Contents 6 0 R >>"
+  );
+  emit("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+
+  // Image XObject (object 5): header text, JPEG bytes, endstream
+  bb.text("5 0 obj\n");
+  objOffsets.push(bb.lastOffset());
+  bb.text(
+    `<< /Type /XObject /Subtype /Image /Width ${W} /Height ${H}` +
+      ` /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode` +
+      ` /Length ${jpeg.length} >>\nstream\n`
+  );
+  bb.raw(jpeg);
+  bb.text("\nendstream\nendobj\n");
+
+  // Contents stream (object 6)
+  bb.text("6 0 obj\n");
+  objOffsets.push(bb.lastOffset());
+  bb.text(`<< /Length ${contentEnc.length} >>\nstream\n`);
+  bb.raw(contentEnc);
+  bb.text("\nendstream\nendobj\n");
+
+  // Cross-reference table
+  const xrefPos = bb.length;
+  bb.text("xref\n");
+  bb.text("0 7\n");
+  bb.text("0000000000 65535 f \n");
+  for (let i = 0; i < 6; i++) {
+    bb.text(String(objOffsets[i]).padStart(10, "0") + " 00000 n \n");
+  }
+  bb.text("trailer\n<< /Size 7 /Root 1 0 R >>\nstartxref\n" + xrefPos + "\n%%EOF\n");
+
+  return bb.end();
+}
 async function extractScaleFromPDF(pdfDoc) {
   try {
     // Try to extract text from all pages (some PDFs have scale info on different pages)
@@ -3624,8 +4079,10 @@ function render() {
   ctx.translate(state.pan.x, state.pan.y);
   ctx.scale(state.zoom, state.zoom);
 
-  // Draw floor plan
-  if (state.floorPlanImage) {
+  // Draw floor plan. The parametric floor plan creator works on a blank grid of
+  // its own (separate from any uploaded floor plan image of the furniture
+  // project), so while the room editor is active we never show the project image.
+  if (state.floorPlanImage && !state.roomEditorMode) {
     ctx.drawImage(state.floorPlanImage, 0, 0);
   } else {
     const themeColors = getThemeCanvasColors();
@@ -4388,14 +4845,15 @@ function handleKeyDown(e) {
 }
 
 // Save project to localStorage
+// The room planner (furniture project) is stored separately from the parametric
+// floor plans: projects hold furniture, the uploaded floor plan image and scale;
+// floor plans (rooms, fixtures, wall thickness) live under their own storage.
 function saveProject() {
   const project = {
     name: state.projectName,
     floorPlan: state.floorPlan,
     pixelsPerMeter: state.pixelsPerMeter,
     furniture: state.furniture,
-    rooms: state.rooms,
-    wallThicknessCm: state.wallThicknessCm,
     snapshotGraph: state.snapshotGraph,
     currentSnapshotId: state.currentSnapshotId,
     lastModified: new Date().toISOString(),
@@ -4434,6 +4892,205 @@ function getSavedProjects() {
   return saved ? JSON.parse(saved) : [];
 }
 
+// --- Floor plan builder (parametric rooms) — separate from projects ---
+
+const FLOORPLAN_STORE = "roomer-floorplans";
+const FLOORPLAN_CURRENT = "roomer-current-floorplan";
+
+function getSavedFloorplans() {
+  try {
+    const v = JSON.parse(localStorage.getItem(FLOORPLAN_STORE) || "[]");
+    return Array.isArray(v) ? v : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveFloorplan() {
+  const list = getSavedFloorplans();
+  const doc = {
+    id: state.floorplanId || (state.floorplanId = Date.now() + "_" + Math.random().toString(36).slice(2, 7)),
+    name: state.floorplanName || "Floor plan",
+    wallThicknessCm: state.wallThicknessCm,
+    rooms: state.rooms,
+    lastModified: new Date().toISOString(),
+  };
+  try {
+    localStorage.setItem(FLOORPLAN_CURRENT, JSON.stringify(doc));
+    const idx = list.findIndex((f) => f.id === doc.id);
+    if (idx >= 0) list[idx] = doc;
+    else list.push(doc);
+    localStorage.setItem(FLOORPLAN_STORE, JSON.stringify(list));
+  } catch (e) {
+    if (e.name === "QuotaExceededError") {
+      alert(t("messages.storageFull"));
+      showUploadOverlay();
+    } else {
+      console.error("Error saving floor plan:", e);
+      alert(t("messages.projectSaveError", { error: e.message }));
+    }
+  }
+  renderFloorplanList();
+}
+
+// Restore the current floor plan into live editor state. Returns true when a
+// floor plan document was loaded.
+function loadCurrentFloorplan() {
+  try {
+    const raw = localStorage.getItem(FLOORPLAN_CURRENT);
+    if (!raw) return false;
+    const doc = JSON.parse(raw);
+    if (!doc || !Array.isArray(doc.rooms)) return false;
+    state.floorplanId = doc.id;
+    state.floorplanName = doc.name || "Floor plan";
+    state.wallThicknessCm = Number.isFinite(doc.wallThicknessCm) && doc.wallThicknessCm > 0 ? doc.wallThicknessCm : DEFAULT_WALL_THICKNESS_CM;
+    state.rooms = doc.rooms;
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+function deleteFloorplan(id) {
+  const list = getSavedFloorplans().filter((f) => f.id !== id);
+  localStorage.setItem(FLOORPLAN_STORE, JSON.stringify(list));
+  renderFloorplanList();
+}
+
+function renderFloorplanList() {
+  const el = document.getElementById("floorplanList");
+  if (!el) return;
+  const plans = getSavedFloorplans();
+  if (!plans.length) {
+    el.innerHTML = "";
+    return;
+  }
+  el.innerHTML = plans
+    .map((p) => {
+      const date = new Date(p.lastModified);
+      const dateStr = date.toLocaleString(getCurrentLocale(), {
+        day: "2-digit", month: "2-digit", year: "numeric",
+        hour: "2-digit", minute: "2-digit",
+      });
+      const active = p.id === state.floorplanId ? " active" : "";
+      return `
+      <div class="project-item floorplan-item${active}" data-floorplanid="${p.id}">
+        <div class="project-item-info">
+          <div class="project-item-name">${escapeHtml(p.name || "Floor plan")}</div>
+          <div class="project-item-date">${dateStr} · ${p.rooms ? p.rooms.length : 0} ${t("floorplan.rooms")}</div>
+        </div>
+        <button class="project-item-delete" data-floorplanid="${p.id}" onclick="event.stopPropagation()">${t("room.delete")}</button>
+      </div>`;
+    })
+    .join("");
+
+  el.querySelectorAll(".floorplan-item").forEach((item) => {
+    item.addEventListener("click", (e) => {
+      if (e.target.classList.contains("project-item-delete")) return;
+      const id = item.getAttribute("data-floorplanid");
+      const doc = getSavedFloorplans().find((f) => f.id === id);
+      if (!doc) return;
+      state.floorplanId = doc.id;
+      state.floorplanName = doc.name || "Floor plan";
+      state.wallThicknessCm = Number.isFinite(doc.wallThicknessCm) && doc.wallThicknessCm > 0 ? doc.wallThicknessCm : DEFAULT_WALL_THICKNESS_CM;
+      state.rooms = doc.rooms || [];
+      state.selectedRoomId = null;
+      state.selectedWall = null;
+      state.selectedFixtureId = null;
+      updateFloorplanInputs();
+      markChanges();
+      renderRoomPanel();
+      render();
+      saveFloorplan();
+    });
+  });
+  el.querySelectorAll("[data-floorplanid]").forEach((btn) => {
+    if (!btn.classList.contains("project-item-delete")) return;
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const id = btn.getAttribute("data-floorplanid");
+      if (!confirm(t("floorplan.deleteConfirm"))) return;
+      deleteFloorplan(id);
+      if (id === state.floorplanId) {
+        state.rooms = [];
+        state.floorplanId = null;
+        state.floorplanName = "Floor plan";
+        localStorage.removeItem(FLOORPLAN_CURRENT);
+        renderRoomPanel();
+        render();
+      }
+    });
+  });
+}
+
+// Start a fresh empty floor plan document
+function newFloorplan() {
+  const nameInp = document.getElementById("floorplanName");
+  const name = (nameInp && nameInp.value.trim()) || "Floor plan";
+  state.floorplanId = null;
+  state.floorplanName = name;
+  state.rooms = [];
+  state.wallThicknessCm = state.wallThicknessCm || DEFAULT_WALL_THICKNESS_CM;
+  state.selectedRoomId = null;
+  state.selectedWall = null;
+  state.selectedFixtureId = null;
+  updateFloorplanInputs();
+  markChanges();
+  renderRoomPanel();
+  render();
+  saveFloorplan();
+}
+
+// The floor plan document (rooms + wall thickness + name) - this is what gets
+// exported as JSON (data only) and imported back
+function buildFloorplanJSON() {
+  return {
+    kind: "floorplan",
+    version: 1,
+    name: state.floorplanName || "Floor plan",
+    wallThicknessCm: state.wallThicknessCm,
+    rooms: state.rooms,
+    exportedAt: new Date().toISOString(),
+  };
+}
+
+// Parse imported floor plan data; returns { name, wallThicknessCm, rooms } or
+// throws on invalid input. Accepts the current export shape or a plain room list.
+function parseFloorplanJSON(text) {
+  const data = JSON.parse(text);
+  const rooms = Array.isArray(data.rooms) ? data.rooms : Array.isArray(data) ? data : null;
+  if (!rooms) throw new Error(t("floorplan.importInvalid"));
+  return {
+    name: data.name || "Floor plan",
+    wallThicknessCm: Number.isFinite(data.wallThicknessCm) && data.wallThicknessCm > 0 ? data.wallThicknessCm : state.wallThicknessCm,
+    rooms,
+  };
+}
+
+// Legacy migration: older saved projects stored the rooms inside the project.
+// Rooms now live in the separate floor plan store, so pull them out of the
+// project object and strip them from it. Loading a legacy plan always imports
+// its rooms into the floor plan store, so nothing is lost.
+function migrateProjectRooms(project) {
+  if (!project || !Array.isArray(project.rooms) || !project.rooms.length) return project;
+  const doc = {
+    id: Date.now() + "_" + Math.random().toString(36).slice(2, 7),
+    name: project.name || "Floor plan",
+    wallThicknessCm: project.wallThicknessCm || DEFAULT_WALL_THICKNESS_CM,
+    rooms: project.rooms,
+    lastModified: new Date().toISOString(),
+  };
+  try {
+    localStorage.setItem(FLOORPLAN_CURRENT, JSON.stringify(doc));
+    const list = getSavedFloorplans();
+    list.push(doc);
+    localStorage.setItem(FLOORPLAN_STORE, JSON.stringify(list));
+  } catch (e) {}
+  delete project.rooms;
+  delete project.wallThicknessCm;
+  return project;
+}
+
 // Load project from localStorage
 function loadProject() {
   // Try new storage first, fallback to old
@@ -4445,6 +5102,8 @@ function loadProject() {
 
   try {
     const project = JSON.parse(saved);
+
+    migrateProjectRooms(project);
 
     state.projectName = project.name || "Untitled Project";
     updateProjectNameDisplay();
@@ -4470,8 +5129,8 @@ function loadProject() {
 
     state.pixelsPerMeter = project.pixelsPerMeter || null;
     state.furniture = project.furniture || [];
-    state.rooms = project.rooms || [];
-    state.wallThicknessCm = project.wallThicknessCm || DEFAULT_WALL_THICKNESS_CM;
+    // Rooms are NOT part of the project: they belong to the separate floor plan
+    // store and are restored by loadCurrentFloorplan().
     // Handle both old and new snapshot formats
     state.snapshotGraph = project.snapshotGraph || [];
     state.currentSnapshotId = project.currentSnapshotId || null;
@@ -4482,9 +5141,6 @@ function loadProject() {
     state.selectedFixtureId = null;
     updateSnapshotUI();
     renderSnapshotGraph();
-
-    // Room plans open directly in the room editor (and hide the overlay)
-    if (state.rooms.length) startRoomEditorMode();
   } catch (e) {
     console.error("Error loading project:", e);
     alert(t("messages.projectLoadError", { error: e.message }));
@@ -4500,12 +5156,13 @@ function loadProjectByName(projectName) {
   const project = projects.find((p) => p.name === projectName);
   if (!project) return;
 
+  migrateProjectRooms(project);
+
   state.projectName = project.name;
   updateProjectNameDisplay();
   state.pixelsPerMeter = project.pixelsPerMeter || null;
   state.furniture = project.furniture || [];
-  state.rooms = project.rooms || [];
-  state.wallThicknessCm = project.wallThicknessCm || DEFAULT_WALL_THICKNESS_CM;
+  // Rooms are not part of the project (separate floor plan store)
   // Handle both old and new snapshot formats
   state.snapshotGraph = project.snapshotGraph || [];
   state.currentSnapshotId = project.currentSnapshotId || null;
@@ -4536,12 +5193,11 @@ function loadProjectByName(projectName) {
   localStorage.setItem("roomer-current-project", JSON.stringify(project));
 
   // Show the restored plan immediately: hide the overlay, size the canvas and
-  // open the room editor whenever rooms exist
+  // (unless a floor plan image is loading) render the furniture project. The
+  // parametric floor plan creator is opened separately via the house button.
   hideUploadOverlay();
   resizeCanvas();
-  if (state.rooms.length) {
-    startRoomEditorMode();
-  } else {
+  if (!project.floorPlan) {
     render();
     updateScaleDisplay();
   }
@@ -4607,8 +5263,6 @@ function exportProject() {
     floorPlan: state.floorPlan,
     pixelsPerMeter: state.pixelsPerMeter,
     furniture: state.furniture,
-    rooms: state.rooms,
-    wallThicknessCm: state.wallThicknessCm,
     snapshotGraph: state.snapshotGraph,
     currentSnapshotId: state.currentSnapshotId,
     lastModified: new Date().toISOString(),
