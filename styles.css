@@ -1242,3 +1242,183 @@ header h1 {
 [data-theme="dark"] .btn-danger {
   color: var(--color-white);
 }
+
+/* ========== LANDING PAGE STYLES ========== */
+
+.landing-page {
+  padding: var(--spacing-xl);
+  max-width: 1200px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.landing-page h1 {
+  font-size: 2.5rem;
+  margin-bottom: var(--spacing-sm);
+  color: var(--color-text);
+}
+
+.landing-page .subtitle {
+  font-size: 1.2rem;
+  color: var(--color-gray);
+  margin-bottom: var(--spacing-xl);
+}
+
+.tool-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: var(--spacing-xl);
+  margin-bottom: var(--spacing-xl);
+}
+
+.tool-card {
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-lg);
+  box-shadow: var(--shadow-md);
+  text-align: left;
+  transition: transform var(--transition-normal), box-shadow var(--transition-normal);
+}
+
+.tool-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
+}
+
+.tool-icon {
+  font-size: 2.5rem;
+  margin-bottom: var(--spacing-md);
+}
+
+.tool-card h2 {
+  font-size: 1.3rem;
+  margin-bottom: var(--spacing-md);
+  color: var(--color-text);
+}
+
+.tool-card > p {
+  color: var(--color-gray);
+  margin-bottom: var(--spacing-md);
+  line-height: 1.5;
+}
+
+.features-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--spacing-lg);
+  text-align: left;
+}
+
+.features-list li {
+  padding: var(--spacing-xs) 0;
+  color: var(--color-gray);
+  position: relative;
+  padding-left: var(--spacing-md);
+}
+
+.features-list li::before {
+  content: "✓";
+  position: absolute;
+  left: 0;
+  color: var(--color-success);
+  font-weight: bold;
+}
+
+.tool-card .btn {
+  display: inline-block;
+  margin-top: var(--spacing-md);
+}
+
+.workflow-section {
+  margin-top: var(--spacing-xl);
+  padding: var(--spacing-xl);
+  background: var(--color-surface-subtle);
+  border-radius: var(--radius-md);
+}
+
+.workflow-section h2 {
+  font-size: 1.5rem;
+  margin-bottom: var(--spacing-lg);
+  color: var(--color-text);
+}
+
+.workflow-steps {
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: var(--spacing-md);
+  flex-wrap: wrap;
+}
+
+.workflow-step {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-md);
+  background: var(--color-surface);
+  padding: var(--spacing-lg);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  flex: 1;
+  min-width: 200px;
+  max-width: 300px;
+}
+
+.step-number {
+  font-size: 2rem;
+  font-weight: bold;
+  color: var(--color-primary);
+  background: var(--color-primary);
+  color: white;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.step-content h3 {
+  font-size: 1.1rem;
+  margin-bottom: var(--spacing-xs);
+  color: var(--color-text);
+}
+
+.step-content p {
+  color: var(--color-gray);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.workflow-arrow {
+  font-size: 2rem;
+  color: var(--color-gray);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.landing-footer {
+  margin-top: var(--spacing-xl);
+  padding: var(--spacing-lg);
+  text-align: center;
+  color: var(--color-gray);
+  border-top: 1px solid var(--color-gray-border);
+}
+
+/* Dark mode adjustments for landing page */
+[data-theme="dark"] .landing-page h1 {
+  color: var(--color-text);
+}
+
+[data-theme="dark"] .tool-card {
+  background: var(--color-surface);
+}
+
+[data-theme="dark"] .workflow-section {
+  background: var(--color-surface-subtle);
+}
+
+[data-theme="dark"] .workflow-step {
+  background: var(--color-surface);
+}

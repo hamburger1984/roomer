@@ -3,584 +3,69 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Roomer - Floor Plan Designer</title>
-    <script>
-      // Apply saved theme before first paint to avoid a flash of the wrong theme
-      (function () {
-        try {
-          var theme = localStorage.getItem("roomer-theme") || "auto";
-          var dark =
-            theme === "dark" ||
-            (theme === "auto" &&
-              window.matchMedia("(prefers-color-scheme: dark)").matches);
-          document.documentElement.setAttribute(
-            "data-theme",
-            dark ? "dark" : "light"
-          );
-        } catch (e) {}
-      })();
-    </script>
+    <title>Roomer - Floor Plan and Furniture Planner</title>
     <link rel="stylesheet" href="styles.css" />
     <link rel="manifest" href="manifest.json" />
-
-    <!-- Favicons -->
     <link rel="icon" type="image/x-icon" href="icons/favicon.ico" />
-    <link
-      rel="icon"
-      type="image/png"
-      sizes="32x32"
-      href="icons/favicon-32x32.png"
-    />
-    <link
-      rel="icon"
-      type="image/png"
-      sizes="16x16"
-      href="icons/favicon-16x16.png"
-    />
-    <link
-      rel="apple-touch-icon"
-      sizes="180x180"
-      href="icons/apple-touch-icon.png"
-    />
-    <script src="libs/pdf-3.11.174.min.js"></script>
+    <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16x16.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png" />
   </head>
   <body>
     <div id="app">
       <header role="banner">
-        <h1>Roomer - Floor Plan Designer</h1>
-        <div class="header-controls">
-          <div
-            id="snapshotGraphHeader"
-            class="snapshot-graph-header"
-            role="navigation"
-            aria-label="Snapshot Navigation"
-          ></div>
-          <button
-            id="createSnapshot"
-            class="btn-icon"
-            aria-label="Create snapshot"
-          >
-            📸
-          </button>
-          <span
-            id="projectNameDisplay"
-            class="project-name-display"
-            aria-live="polite"
-            >Untitled Project</span
-          >
-          <button
-            id="renameProject"
-            class="btn-icon"
-            aria-label="Rename project"
-          >
-            ✏️
-          </button>
-          <button
-            id="exportProject"
-            class="btn-icon"
-            aria-label="Export project"
-          >
-            💾
-          </button>
-          <button
-            id="importProject"
-            class="btn-icon"
-            aria-label="Import project"
-          >
-            📂
-          </button>
-          <input
-            type="file"
-            id="projectImport"
-            accept=".json,.roomer.json"
-            class="panel-hidden"
-            aria-label="Select project file"
-          />
-          <select
-            id="languageSelector"
-            class="language-selector"
-            aria-label="Select language"
-          >
-            <option value="en">🇬🇧 English</option>
-            <option value="de">🇩🇪 Deutsch</option>
-          </select>
-          <select
-            id="themeSelector"
-            class="language-selector"
-            aria-label="Select theme"
-          >
-            <option value="auto">Auto</option>
-            <option value="light">☀️ Light</option>
-            <option value="dark">🌙 Dark</option>
-          </select>
-          <button id="closeProject" class="btn" aria-label="Close project">
-            Close Project
-          </button>
-        </div>
+        <h1>Roomer</h1>
+        <p class="subtitle">Floor Plan & Furniture Planning Tools</p>
       </header>
-
-      <div class="container">
-        <!-- Sidebar Hover Trigger -->
-        <div class="sidebar-hover-trigger"></div>
-
-        <!-- Sidebar Pin Button -->
-        <button
-          class="sidebar-pin-btn"
-          id="sidebarPinBtn"
-          aria-label="Pin sidebar"
-          aria-pressed="false"
-        >
-          📌
-        </button>
-
-        <!-- Sidebar -->
-        <aside
-          class="sidebar"
-          id="sidebar"
-          role="complementary"
-          aria-label="Furniture and Tools"
-        >
-          <section class="section" aria-labelledby="furniture-section-heading">
-            <h2 id="furniture-section-heading" class="sr-only">
-              Furniture Categories
-            </h2>
-            <nav class="furniture-categories" aria-label="Furniture Categories">
-              <button
-                class="category-btn active"
-                data-category="all"
-                aria-pressed="true"
-              >
-                All
-              </button>
-              <button
-                class="category-btn"
-                data-category="seating"
-                aria-pressed="false"
-              >
-                Seating
-              </button>
-              <button
-                class="category-btn"
-                data-category="tables"
-                aria-pressed="false"
-              >
-                Tables
-              </button>
-              <button
-                class="category-btn"
-                data-category="storage"
-                aria-pressed="false"
-              >
-                Cabinets
-              </button>
-              <button
-                class="category-btn"
-                data-category="beds"
-                aria-pressed="false"
-              >
-                Beds
-              </button>
-              <button
-                class="category-btn"
-                data-category="appliances"
-                aria-pressed="false"
-              >
-                Appliances
-              </button>
-              <button
-                class="category-btn"
-                data-category="decoration"
-                aria-pressed="false"
-              >
-                Decoration
-              </button>
-            </nav>
-            <div id="furnitureList" class="furniture-list" role="list"></div>
-          </section>
-
-          <section
-            class="section panel-hidden"
-            id="selectedFurniturePanel"
-            aria-labelledby="furniture-properties-heading"
-          >
-            <h2 id="furniture-properties-heading" class="sr-only">
-              Furniture Properties
-            </h2>
-            <form
-              class="furniture-properties"
-              aria-label="Edit furniture properties"
-            >
-              <label>
-                Name:
-                <input
-                  type="text"
-                  id="furnitureName"
-                  aria-label="Furniture name"
-                />
-              </label>
-              <label>
-                Width (cm):
-                <input
-                  type="number"
-                  id="furnitureWidth"
-                  step="1"
-                  min="1"
-                  aria-label="Width in centimeters"
-                />
-              </label>
-              <label>
-                Depth (cm):
-                <input
-                  type="number"
-                  id="furnitureDepth"
-                  step="1"
-                  min="1"
-                  aria-label="Depth in centimeters"
-                />
-              </label>
-              <label id="seatDepthLabel" class="property-label-hidden">
-                Seat Depth (cm):
-                <input
-                  type="number"
-                  id="furnitureSeatDepth"
-                  step="1"
-                  min="1"
-                  aria-label="Seat depth in centimeters"
-                />
-              </label>
-              <label id="expandedWidthLabel" class="property-label-hidden">
-                Expanded Width (cm):
-                <input
-                  type="number"
-                  id="furnitureExpandedWidth"
-                  step="1"
-                  min="1"
-                  aria-label="Expanded width in centimeters"
-                />
-              </label>
-              <label id="expandedDepthLabel" class="property-label-hidden">
-                Expanded Depth (cm):
-                <input
-                  type="number"
-                  id="furnitureExpandedDepth"
-                  step="1"
-                  min="1"
-                  aria-label="Expanded depth in centimeters"
-                />
-              </label>
-              <label>
-                Rotation (°):
-                <input
-                  type="number"
-                  id="furnitureRotation"
-                  step="1"
-                  min="0"
-                  max="359"
-                  aria-label="Rotation in degrees"
-                />
-              </label>
-              <button
-                id="deleteFurniture"
-                class="btn btn-danger"
-                type="button"
-                aria-label="Delete furniture"
-              >
-                Delete
-              </button>
-            </form>
-          </section>
-
-          <!-- Room Editor Panel -->
-          <section
-            class="section panel-hidden"
-            id="roomPanel"
-            aria-labelledby="room-heading"
-          >
-            <h2 id="room-heading" class="sr-only">Room editor</h2>
-            <h3 id="roomHeading" class="measure-title">🏠 Rooms</h3>
-            <div class="measure-brand">
-              <span class="measure-brand-label">Floor plan builder</span>
-              <input
-                id="floorplanName"
-                type="text"
-                value="Floor plan"
-                aria-label="Floor plan name"
-              />
-            </div>
-            <div class="measure-actions">
-              <button id="newFloorplanBtn" class="btn measure-btn" aria-label="Start a new floor plan">
-                ＋ New
-              </button>
-              <button id="floorplanToFurniture" class="btn measure-btn" aria-label="Start a furniture project from this floor plan">
-                ↗ Furniture
-              </button>
-              <button id="exportFloorplanJson" class="btn measure-btn" aria-label="Export floor plan as JSON">
-                ⬇ JSON
-              </button>
-              <button id="exportFloorplanPdf" class="btn measure-btn" aria-label="Export floor plan as PDF">
-                📄 PDF
-              </button>
-              <button id="importFloorplanJson" class="btn measure-btn" aria-label="Import floor plan from JSON">
-                ⬆ Import
-              </button>
-              <input
-                id="floorplanImportInput"
-                type="file"
-                accept=".json,application/json"
-                class="panel-hidden"
-                aria-label="Import floor plan JSON file"
-              />
-            </div>
-            <div id="floorplanList" class="obstacle-list" role="list" aria-label="Saved floor plans"></div>
-            <label class="measure-scale-label" for="wallThickness">
-              Wall thickness (cm):
-              <input
-                id="wallThickness"
-                type="number"
-                step="0.5"
-                min="1"
-                value="15"
-                aria-label="Wall thickness in centimeters"
-              />
-            </label>
-            <button id="addRoomBtn" class="btn measure-btn">
-              ＋ Add room
-            </button>
-            <div
-              id="roomList"
-              class="obstacle-list"
-              role="list"
-              aria-label="Room list"
-            ></div>
-            <div id="roomDetail"></div>
-            <div class="measure-actions">
-              <button
-                id="exportRoomImage"
-                class="btn measure-btn"
-                aria-label="Export floor plan image"
-              >
-                📷 Export PNG
-              </button>
-              <button
-                id="clearRooms"
-                class="btn btn-danger measure-btn"
-                aria-label="Delete all rooms"
-              >
-                🗑 Clear
-              </button>
-              <button
-                id="exitRoomEditor"
-                class="btn btn-secondary measure-exit-btn"
-                aria-label="Exit room editor"
-              >
-                Done
-              </button>
-            </div>
-          </section>
-        </aside>
-
-        <!-- Main Canvas Area -->
-        <main
-          class="canvas-container"
-          role="main"
-          aria-label="Floor Plan Workspace"
-        >
-          <div id="canvasWrapper" class="canvas-wrapper">
-            <canvas id="mainCanvas" aria-label="Floor plan canvas"></canvas>
-            <div
-              id="uploadOverlay"
-              class="upload-overlay"
-              role="dialog"
-              aria-labelledby="upload-dialog-title"
-            >
-              <div class="upload-box">
-                <h2 id="upload-dialog-title">New Project</h2>
-                <p>Upload Floor Plan</p>
-                <input
-                  type="file"
-                  id="floorPlanUpload"
-                  accept="image/*,.pdf"
-                  class="panel-hidden"
-                  aria-label="Select floor plan file"
-                />
-                <input
-                  type="text"
-                  id="projectNameInput"
-                  placeholder="Project Name"
-                  class="project-name-input"
-                  aria-label="Enter project name"
-                />
-                <button
-                  id="uploadBtn"
-                  class="btn upload-btn-sized"
-                  aria-label="Select file for floor plan"
-                >
-                  📁 Select File
-                </button>
-
-<button
-                id="blankProjectBtn"
-                class="btn upload-btn-sized"
-                aria-label="Start a blank board and draw rooms with the room editor"
-              >
-                🏠 Draw rooms from scratch (blank board)
-              </button>
-
-                <section
-                  class="project-list-section"
-                  aria-labelledby="saved-projects-heading"
-                >
-                  <h3 id="saved-projects-heading">Saved Projects</h3>
-                  <div
-                    id="projectList"
-                    class="project-list-container"
-                    role="list"
-                  ></div>
-                </section>
-              </div>
-            </div>
-
-            <!-- Bottom Right Toolbar -->
-            <nav class="canvas-controls" aria-label="View Controls">
-              <button id="undoBtn" class="btn-icon" aria-label="Undo" disabled>
-                ↶
-              </button>
-              <button id="redoBtn" class="btn-icon" aria-label="Redo" disabled>
-                ↷
-              </button>
-              <span class="scale-separator" aria-hidden="true">|</span>
-              <button id="zoomIn" class="btn-icon" aria-label="Zoom in">
-                +
-              </button>
-              <button id="zoomOut" class="btn-icon" aria-label="Zoom out">
-                -
-              </button>
-              <button id="resetView" class="btn-icon" aria-label="Reset view">
-                ⌂
-              </button>
-              <span id="zoomLevel" aria-live="polite" aria-label="Zoom level"
-                >100%</span
-              >
-              <span class="scale-separator" aria-hidden="true">|</span>
-              <span id="scaleDisplay" class="scale-info" aria-live="polite"
-                >No Scale</span
-              >
-              <button
-                id="roomBtn"
-                class="btn-icon"
-                aria-label="Room editor"
-                aria-pressed="false"
-              >
-                🏠
-              </button>
-              <button id="calibrateBtnSmall"
-                class="btn-icon"
-                aria-label="Calibrate scale"
-              >
-                ✏️
-              </button>
-              <button
-                id="cropBtn"
-                class="btn-icon"
-                aria-label="Crop floor plan"
-              >
-                ✂️
-              </button>
-            </nav>
-
-            <!-- Calibration Panel -->
-            <aside
-              id="calibrationPanel"
-              class="calibration-panel panel-hidden"
-              role="dialog"
-              aria-labelledby="calibration-panel-title"
-            >
-              <h4 id="calibration-panel-title">Calibrate Scale</h4>
-              <p class="calibration-instructions">
-                1. Click start point<br />
-                2. Click end point<br />
-                3. Enter actual length
-              </p>
-              <div id="calibrationMeasure" class="panel-hidden">
-                <label>
-                  Length of this line:
-                  <input
-                    type="number"
-                    id="calibrationLength"
-                    step="0.01"
-                    min="0.01"
-                    placeholder="e.g. 3.25"
-                    aria-label="Length of reference line"
-                  />
-                  <select id="calibrationUnit" aria-label="Measurement unit">
-                    <option value="m">Meter</option>
-                    <option value="cm">Centimeter</option>
-                  </select>
-                </label>
-                <div class="calibration-controls">
-                  <button
-                    id="applyCalibrationBtn"
-                    class="btn"
-                    aria-label="Apply calibration"
-                  >
-                    Apply
-                  </button>
-                  <button
-                    id="cancelCalibrationBtn"
-                    class="btn btn-secondary"
-                    aria-label="Cancel calibration"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </aside>
-
-            <!-- Crop Panel -->
-            <aside
-              id="cropPanel"
-              class="crop-panel panel-hidden"
-              role="dialog"
-              aria-labelledby="crop-panel-title"
-            >
-              <h4 id="crop-panel-title">Crop Floor Plan</h4>
-              <p class="crop-instructions">
-                Draw a rectangle over the desired area
-              </p>
-              <div id="cropControls" class="panel-hidden">
-                <p>
-                  Selected area:
-                  <span id="cropDimensions"></span>
-                </p>
-                <div class="crop-controls">
-                  <button id="applyCropBtn" class="btn" aria-label="Apply crop">
-                    Crop
-                  </button>
-                  <button
-                    id="cancelCropBtn"
-                    class="btn btn-secondary"
-                    aria-label="Cancel crop"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </aside>
+      
+      <main class="landing-page">
+        <div class="tool-cards">
+          <div class="tool-card">
+            <div class="tool-icon">🏠</div>
+            <h2>Floor Plan Builder</h2>
+            <p>Create parametric floor plans from scratch. Draw rooms with walls, add doors, windows, heaters, and chimneys. Rooms snap together automatically.</p>
+            <ul class="features-list">
+              <li>Draw rooms with precise dimensions</li>
+              <li>Add doors with configurable swing direction</li>
+              <li>Add windows with boards</li>
+              <li>Rooms snap together automatically</li>
+              <li>Export as PNG, PDF, or JSON</li>
+            </ul>
+            <a href="floorplans.html" class="btn btn-primary">Open Floor Plan Builder →</a>
           </div>
-        </main>
-      </div>
+          
+          <div class="tool-card">
+            <div class="tool-icon">🛋️</div>
+            <h2>Furniture Planner</h2>
+            <p>Place furniture on your floor plans. Upload an image or PDF, calibrate the scale, and arrange furniture.</p>
+            <ul class="features-list">
+              <li>Upload floor plan images or PDFs</li>
+              <li>Calibrate scale for accurate measurements</li>
+              <li>Extensive furniture library</li>
+              <li>Drag and drop furniture placement</li>
+              <li>Rotate furniture with 45° snapping</li>
+              <li>Adjust furniture dimensions</li>
+              <li>Snapshot system for version control</li>
+              <li>Undo/Redo support</li>
+              <li>Crop floor plans</li>
+            </ul>
+            <a href="furniture.html" class="btn btn-primary">Open Furniture Planner →</a>
+          </div>
+        </div>
+        
+        <div class="workflow-section">
+          <h2>Workflow</h2>
+          <p class="workflow-steps">
+            <span class="step">1. Create floor plan → </span>
+            <span class="step">2. Export as PNG → </span>
+            <span class="step">3. Plan furniture</span>
+          </p>
+        </div>
+      </main>
+      
+      <footer class="landing-footer">
+        <p>Roomer - Offline-first floor planning tools. All data stays in your browser.</p>
+      </footer>
     </div>
-
-    <script src="i18n.js"></script>
-    <script src="app.js"></script>
-    <script>
-      // Register service worker
-      if ("serviceWorker" in navigator) {
-        navigator.serviceWorker
-          .register("sw.js")
-          .then((reg) => console.log("Service Worker registered"))
-          .catch((err) => console.log("Service Worker registration failed"));
-      }
-    </script>
   </body>
 </html>
