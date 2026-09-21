@@ -1,7 +1,7 @@
 {
   "name": "Roomer - Floor Plan & Furniture Planner",
   "short_name": "Roomer",
-  "version": "1.14",
+  "version": "1.15",
   "description": "Offline-first floor plan and furniture planning tools with parametric room editor",
   "lang": "en",
   "start_url": "/index.html",

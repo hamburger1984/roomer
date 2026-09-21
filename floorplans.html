@@ -45,17 +45,23 @@
     <script src="libs/pdf-3.11.174.min.js"></script>
   
     <style>
-      /* Floor Plan Builder mode - hide furniture elements */
+      /* Floor Plan Builder mode: hide everything that only belongs to the
+         Furniture Planner (furniture library, image calibration/crop, project
+         export/import, snapshots). */
       .furniture-categories, #furnitureList, #selectedFurniturePanel,
       #furnitureName, #furnitureWidth, #furnitureDepth, #furnitureSeatDepth,
       #furnitureExpandedWidth, #furnitureExpandedDepth, #furnitureRotation,
-      #deleteFurniture, #snapshotGraphHeader, #createSnapshot {
+      #deleteFurniture, #snapshotGraphHeader, #createSnapshot,
+      #calibrateBtnSmall, #cropBtn, #calibrationPanel, #cropPanel,
+      #uploadBtn, #floorPlanUpload, #projectList, #saved-projects-heading,
+      #renameProject, #exportProject, #importProject, #projectImport,
+      #closeProject {
         display: none !important;
       }
     </style>
 
   </head>
-  <body>
+  <body data-page="floorplans">
     <div id="app">
       <header role="banner">
         <h1>Roomer - Floor Plan Builder</h1>
@@ -586,24 +592,14 @@
     <script src="i18n.js"></script>
     <script src="app.js"></script>
     <script>
-      // Register service worker
+      // Register the service worker. When a new version activates it refreshes
+      // any stale controlled page automatically (see sw.js).
       if ("serviceWorker" in navigator) {
         navigator.serviceWorker
-          .register("sw.js")
-          .then((reg) => console.log("Service Worker registered"))
+          .register("sw.js", { updateViaCache: "none" })
+          .then((reg) => reg.update())
           .catch((err) => console.log("Service Worker registration failed"));
       }
-    </script>
-  
-    <script>
-      // Start in room editor mode by default
-      window.addEventListener('load', function() {
-        setTimeout(function() {
-          if (window.startRoomEditorMode) {
-            window.startRoomEditorMode();
-          }
-        }, 100);
-      });
     </script>
 
   </body>

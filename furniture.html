@@ -45,19 +45,21 @@
     <script src="libs/pdf-3.11.174.min.js"></script>
   
     <style>
-      /* Furniture Planner mode - hide room editor elements */
+      /* Furniture Planner mode - hide room editor / floor plan builder
+         elements. The blank-board room editor belongs to the Floor Plan
+         Builder page. */
       #roomPanel, #roomBtn, #floorplanToFurniture, #newFloorplanBtn,
-      #floorplanName, #wallThickness, #addRoomBtn, #roomList, #roomDetail,
-      #exportRoomImage, #clearRooms, #exitRoomEditor, #exportFloorplanJson,
-      #exportFloorplanPdf, #importFloorplanJson, #floorplanImportInput,
-      #exportFloorplanJsonBtn, #exportFloorplanPdfBtn, #importFloorplanJsonBtn,
-      #snapshotGraphHeader, #createSnapshot {
+      #blankProjectBtn, #floorplanName, #wallThickness, #addRoomBtn, #roomList,
+      #roomDetail, #exportRoomImage, #clearRooms, #exitRoomEditor,
+      #exportFloorplanJson, #exportFloorplanPdf, #importFloorplanJson,
+      #floorplanImportInput, #exportFloorplanJsonBtn, #exportFloorplanPdfBtn,
+      #importFloorplanJsonBtn, #snapshotGraphHeader, #createSnapshot {
         display: none !important;
       }
     </style>
 
   </head>
-  <body>
+  <body data-page="furniture">
     <div id="app">
       <header role="banner">
         <h1>Roomer - Furniture Planner</h1>
@@ -588,24 +590,14 @@
     <script src="i18n.js"></script>
     <script src="app.js"></script>
     <script>
-      // Register service worker
+      // Register the service worker. When a new version activates it refreshes
+      // any stale controlled page automatically (see sw.js).
       if ("serviceWorker" in navigator) {
         navigator.serviceWorker
-          .register("sw.js")
-          .then((reg) => console.log("Service Worker registered"))
+          .register("sw.js", { updateViaCache: "none" })
+          .then((reg) => reg.update())
           .catch((err) => console.log("Service Worker registration failed"));
       }
-    </script>
-  
-    <script>
-      // Ensure furniture mode - room editor should not be active
-      window.addEventListener('load', function() {
-        setTimeout(function() {
-          if (window.state && window.state.roomEditorMode) {
-            window.state.roomEditorMode = false;
-          }
-        }, 100);
-      });
     </script>
 
   </body>

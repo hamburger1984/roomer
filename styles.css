@@ -536,6 +536,22 @@ header h1 {
   background: var(--color-danger-dark);
 }
 
+.project-item-rename {
+  background: transparent;
+  color: var(--color-text);
+  border: none;
+  padding: 0.4rem 0.6rem;
+  margin-right: var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1;
+}
+
+.project-item-rename:hover {
+  background: var(--color-surface-hover);
+}
+
 /* Floor plan builder: name row + saved floor plan list inside the room panel */
 .measure-brand {
   display: flex;

@@ -800,12 +800,14 @@ function updateUndoRedoButtons() {
 
 // Show/hide upload overlay
 function showUploadOverlay() {
-  document.getElementById("uploadOverlay").style.display = "flex";
+  const overlay = document.getElementById("uploadOverlay");
+  if (overlay) overlay.style.display = "flex";
   renderProjectList();
 }
 
 function hideUploadOverlay() {
-  document.getElementById("uploadOverlay").style.display = "none";
+  const overlay = document.getElementById("uploadOverlay");
+  if (overlay) overlay.style.display = "none";
 }
 
 // Start a fresh blank board so a floor plan can be drawn with the room editor
@@ -988,6 +990,12 @@ function setTheme(theme) {
   applyTheme();
 }
 
+// Which tool is this document? "floorplans" and "furniture" are the two
+// separate pages; anything else falls back to the combined behaviour.
+function getPageMode() {
+  return (document.body && document.body.dataset.page) || "app";
+}
+
 // Initialize application
 function init() {
   // Initialize i18n system first
@@ -997,12 +1005,31 @@ function init() {
   // Initialize theme (light/dark/auto)
   initTheme();
 
+  const pageMode = getPageMode();
+  const isFloorplanPage = pageMode === "floorplans";
+  const isFurniturePage = pageMode === "furniture";
+
   setupEventListeners();
+  resizeCanvas();
+
+  // Floor Plan Builder: only the parametric floor plan (rooms/walls) belongs
+  // here. Never restore a furniture project – the tools are kept separate and
+  // hand off through the "→ Furniture" button.
+  if (isFloorplanPage) {
+    loadCurrentFloorplan();
+    render();
+    updateScaleDisplay();
+    updateUndoRedoButtons();
+    startRoomEditorMode();
+    return;
+  }
+
   renderFurnitureLibrary();
   loadProject();
-  // Restore the last-used parametric floor plan (rooms/walls) into the editor
-  const restoredPlan = loadCurrentFloorplan();
-  resizeCanvas();
+
+  // The parametric editor is a separate tool, so only the combined page
+  // restores it into the room editor. The Furniture Planner never enters it.
+  const restoredPlan = isFurniturePage ? false : loadCurrentFloorplan();
   render();
   updateScaleDisplay();
   updateSnapshotUI();
@@ -1013,6 +1040,7 @@ function init() {
   // into the room editor so the rooms are selectable/movable/deletable instead
   // of being drawn as a non-interactive picture.
   if (
+    !isFurniturePage &&
     (restoredPlan || state.rooms.length) &&
     !state.floorPlanImage &&
     !state.furniture.length
@@ -1020,15 +1048,16 @@ function init() {
     startRoomEditorMode();
   }
 
-  // Show upload overlay only if there is no content at all (no floor plan,
-  // no rooms, no furniture) – stored room plans must be visible right away
-  if (
-    !state.roomEditorMode &&
-    !state.floorPlanImage &&
-    !state.rooms.length &&
-    !state.furniture.length
-  ) {
+  // Show the upload overlay only when there is nothing to display.
+  const hasContent =
+    state.furniture.length > 0 ||
+    !!state.floorPlanImage ||
+    !!state.floorPlan ||
+    state.rooms.length > 0;
+  if (!state.roomEditorMode && !hasContent) {
     showUploadOverlay();
+  } else if (isFurniturePage) {
+    hideUploadOverlay();
   }
 }
 
@@ -1079,6 +1108,14 @@ function updateAllUIText() {
 
 // Setup all event listeners
 function setupEventListeners() {
+  // Attach a listener only when the element exists on this page. The Floor Plan
+  // Builder and Furniture Planner share this script but render different
+  // controls, so every lookup must be optional.
+  const on = (id, event, handler, opts) => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener(event, handler, opts);
+  };
+
   // Language switcher
   const languageSelector = document.getElementById("languageSelector");
   if (languageSelector && typeof setLanguage === "function") {
@@ -1102,39 +1139,28 @@ function setupEventListeners() {
     }
   }
 
-  // File upload
-  document
-    .getElementById("floorPlanUpload")
-    .addEventListener("change", handleFloorPlanUpload);
-  document.getElementById("uploadBtn").addEventListener("click", () => {
-    document.getElementById("floorPlanUpload").click();
+  // File upload (Furniture Planner only)
+  on("floorPlanUpload", "change", handleFloorPlanUpload);
+  on("uploadBtn", "click", () => {
+    const input = document.getElementById("floorPlanUpload");
+    if (input) input.click();
   });
 
   // Start a blank board to draw a floor plan from scratch
-  document
-    .getElementById("blankProjectBtn")
-    .addEventListener("click", startBlankProject);
+  on("blankProjectBtn", "click", startBlankProject);
 
-  // Calibration tool
-  document
-    .getElementById("calibrateBtnSmall")
-    .addEventListener("click", startCalibration);
-  document
-    .getElementById("applyCalibrationBtn")
-    .addEventListener("click", applyCalibration);
-  document
-    .getElementById("cancelCalibrationBtn")
-    .addEventListener("click", cancelCalibration);
+  // Calibration tool (Furniture Planner only)
+  on("calibrateBtnSmall", "click", startCalibration);
+  on("applyCalibrationBtn", "click", applyCalibration);
+  on("cancelCalibrationBtn", "click", cancelCalibration);
 
-  // Crop tool
-  document.getElementById("cropBtn").addEventListener("click", startCrop);
-  document.getElementById("applyCropBtn").addEventListener("click", applyCrop);
-  document
-    .getElementById("cancelCropBtn")
-    .addEventListener("click", cancelCrop);
+  // Crop tool (Furniture Planner only)
+  on("cropBtn", "click", startCrop);
+  on("applyCropBtn", "click", applyCrop);
+  on("cancelCropBtn", "click", cancelCrop);
 
   // Room editor
-  document.getElementById("roomBtn").addEventListener("click", toggleRoomEditorMode);
+  on("roomBtn", "click", toggleRoomEditorMode);
   const floorplanNameInput = document.getElementById("floorplanName");
   if (floorplanNameInput) {
     floorplanNameInput.addEventListener("change", () => {
@@ -1192,17 +1218,13 @@ function setupEventListeners() {
   if (exitRoomEditor) exitRoomEditor.addEventListener("click", exitRoomEditorMode);
 
   // Undo/Redo controls
-  document.getElementById("undoBtn").addEventListener("click", undo);
-  document.getElementById("redoBtn").addEventListener("click", redo);
+  on("undoBtn", "click", undo);
+  on("redoBtn", "click", redo);
 
   // Zoom controls
-  document
-    .getElementById("zoomIn")
-    .addEventListener("click", () => adjustZoom(0.1));
-  document
-    .getElementById("zoomOut")
-    .addEventListener("click", () => adjustZoom(-0.1));
-  document.getElementById("resetView").addEventListener("click", resetView);
+  on("zoomIn", "click", () => adjustZoom(0.1));
+  on("zoomOut", "click", () => adjustZoom(-0.1));
+  on("resetView", "click", resetView);
 
   // Category buttons
   document.querySelectorAll(".category-btn").forEach((btn) => {
@@ -1229,6 +1251,7 @@ function setupEventListeners() {
 
   propertyInputs.forEach((id) => {
     const input = document.getElementById(id);
+    if (!input) return;
     input.addEventListener("focus", () => {
       // Push undo state when starting to edit a property
       if (!state.propertyEditInProgress) {
@@ -1243,29 +1266,21 @@ function setupEventListeners() {
     input.addEventListener("input", handleFurniturePropertyChange);
   });
 
-  document
-    .getElementById("deleteFurniture")
-    .addEventListener("click", deleteFurniture);
+  on("deleteFurniture", "click", deleteFurniture);
 
-  // Project controls
-  document
-    .getElementById("closeProject")
-    .addEventListener("click", closeProject);
-  document
-    .getElementById("renameProject")
-    .addEventListener("click", renameProject);
-  document
-    .getElementById("exportProject")
-    .addEventListener("click", exportProject);
-  document.getElementById("importProject").addEventListener("click", () => {
-    document.getElementById("projectImport").click();
+  // Project controls (Furniture Planner only)
+  on("closeProject", "click", closeProject);
+  on("renameProject", "click", renameProject);
+  on("exportProject", "click", exportProject);
+  on("importProject", "click", () => {
+    const input = document.getElementById("projectImport");
+    if (input) input.click();
   });
-  document
-    .getElementById("projectImport")
-    .addEventListener("change", handleProjectImport);
+  on("projectImport", "change", handleProjectImport);
 
   // Snapshot controls
-  document.getElementById("createSnapshot").addEventListener("click", () => {
+  on("createSnapshot", "click", () => {
+    // checkForFork() handles the fork flow itself and then snapshots.
     if (checkForFork()) {
       // After handling fork, create the snapshot
       createSnapshot();
@@ -1279,28 +1294,34 @@ function setupEventListeners() {
   const sidebarPinBtn = document.getElementById("sidebarPinBtn");
   const sidebarHoverTrigger = document.querySelector(".sidebar-hover-trigger");
 
-  sidebarPinBtn.addEventListener("click", toggleSidebarPin);
+  if (sidebarPinBtn) sidebarPinBtn.addEventListener("click", toggleSidebarPin);
 
-  sidebarHoverTrigger.addEventListener("mouseenter", () => {
-    if (!state.sidebarPinned) {
-      sidebar.classList.remove("unpinned");
-    }
-  });
+  if (sidebarHoverTrigger && sidebar) {
+    sidebarHoverTrigger.addEventListener("mouseenter", () => {
+      if (!state.sidebarPinned) {
+        sidebar.classList.remove("unpinned");
+      }
+    });
+  }
 
-  sidebar.addEventListener("mouseleave", () => {
-    if (!state.sidebarPinned) {
-      sidebar.classList.add("unpinned");
-    }
-  });
+  if (sidebar) {
+    sidebar.addEventListener("mouseleave", () => {
+      if (!state.sidebarPinned) {
+        sidebar.classList.add("unpinned");
+      }
+    });
+  }
 
   // Keyboard shortcuts
   document.addEventListener("keydown", handleKeyDown);
 
   // Canvas interactions
-  canvas.addEventListener("mousedown", handleCanvasMouseDown);
-  canvas.addEventListener("mousemove", handleCanvasMouseMove);
-  canvas.addEventListener("mouseup", handleCanvasMouseUp);
-  canvas.addEventListener("wheel", handleCanvasWheel, { passive: false });
+  if (canvas) {
+    canvas.addEventListener("mousedown", handleCanvasMouseDown);
+    canvas.addEventListener("mousemove", handleCanvasMouseMove);
+    canvas.addEventListener("mouseup", handleCanvasMouseUp);
+    canvas.addEventListener("wheel", handleCanvasWheel, { passive: false });
+  }
 
   // Window resize
   window.addEventListener("resize", resizeCanvas);
@@ -3460,9 +3481,8 @@ function startFurnitureProjectFromFloorplan() {
     return false;
   }
   const dataUrl = plan.toDataURL("image/png");
-  const img = new Image();
   state.floorPlan = dataUrl;
-  state.floorPlanImage = img;
+  state.floorPlanImage = null;
   state.pixelsPerMeter = state.pixelsPerMeter || DEFAULT_MEASURE_SCALE;
   state.projectName = state.floorplanName || "Untitled Project";
   state.furniture = [];
@@ -3471,21 +3491,11 @@ function startFurnitureProjectFromFloorplan() {
   state.draggingRoomId = null;
   state.draggingFixture = null;
   updateProjectNameDisplay();
-  exitRoomEditorMode();
+  saveProject();
 
-  img.onload = () => {
-    canvas.width = img.width;
-    canvas.height = img.height;
-    resizeCanvas();
-    fitToView();
-    render();
-    updateScaleDisplay();
-    saveProject();
-  };
-  img.src = dataUrl;
-  hideUploadOverlay();
-  resizeCanvas();
-  render();
+  // The floor plan is handed over to the separate Furniture Planner page,
+  // which restores this freshly saved project on load.
+  window.location.href = "furniture.html";
   return true;
 }
 
@@ -4979,14 +4989,15 @@ function renderFloorplanList() {
           <div class="project-item-name">${escapeHtml(p.name || "Floor plan")}</div>
           <div class="project-item-date">${dateStr} · ${p.rooms ? p.rooms.length : 0} ${t("floorplan.rooms")}</div>
         </div>
-        <button class="project-item-delete" data-floorplanid="${p.id}" onclick="event.stopPropagation()">${t("room.delete")}</button>
+        <button type="button" class="project-item-rename" data-floorplanid="${p.id}" title="${t("floorplan.rename")}" aria-label="${t("floorplan.rename")}">✏️</button>
+        <button type="button" class="project-item-delete" data-floorplanid="${p.id}" onclick="event.stopPropagation()">${t("room.delete")}</button>
       </div>`;
     })
     .join("");
 
   el.querySelectorAll(".floorplan-item").forEach((item) => {
     item.addEventListener("click", (e) => {
-      if (e.target.classList.contains("project-item-delete")) return;
+      if (e.target.closest("button")) return;
       const id = item.getAttribute("data-floorplanid");
       const doc = getSavedFloorplans().find((f) => f.id === id);
       if (!doc) return;
@@ -5004,8 +5015,7 @@ function renderFloorplanList() {
       saveFloorplan();
     });
   });
-  el.querySelectorAll("[data-floorplanid]").forEach((btn) => {
-    if (!btn.classList.contains("project-item-delete")) return;
+  el.querySelectorAll(".project-item-delete").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
       const id = btn.getAttribute("data-floorplanid");
@@ -5021,6 +5031,37 @@ function renderFloorplanList() {
       }
     });
   });
+
+  el.querySelectorAll(".project-item-rename").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      renameFloorplan(btn.getAttribute("data-floorplanid"));
+    });
+  });
+}
+
+// Rename a saved floor plan (the current one is also updated live).
+function renameFloorplan(id) {
+  const list = getSavedFloorplans();
+  const doc = list.find((f) => f.id === id);
+  if (!doc) return;
+  const current = doc.name || "Floor plan";
+  const next = prompt(t("floorplan.renamePrompt"), current);
+  if (next === null) return;
+  const name = next.trim();
+  if (!name || name === current) return;
+
+  doc.name = name;
+  doc.lastModified = new Date().toISOString();
+  localStorage.setItem(FLOORPLAN_STORE, JSON.stringify(list));
+
+  if (id === state.floorplanId) {
+    state.floorplanName = name;
+    localStorage.setItem(FLOORPLAN_CURRENT, JSON.stringify(doc));
+    updateFloorplanInputs();
+    renderRoomPanel();
+  }
+  renderFloorplanList();
 }
 
 // Start a fresh empty floor plan document

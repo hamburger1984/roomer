@@ -1,5 +1,33 @@
 # Changelog
 
+## Version 1.15 - Separate Floor Plan Builder and Furniture Planner pages (September 2026)
+
+### Fixed
+- **Floor Plan Builder page no longer crashes with `document.getElementById(...) is null`**:
+  the shared app script attached listeners to furniture-only controls (e.g. the floor
+  plan upload input) that do not exist on every page. All listener wiring is now
+  optional, so a page only binds the controls it actually renders
+- **Furniture Planner no longer opens the room editor**: the shared init used to
+  restore the saved parametric floor plan and enter room-editor mode on every page.
+  Initialization is now page-aware (`data-page`), so the Furniture Planner only loads
+  furniture projects and the Floor Plan Builder only loads floor plans
+- **"→ Furniture" handoff**: renders the current plan, saves it and opens
+  `furniture.html` with the project restored (previously it switched an in-page mode
+  that the Floor Plan Builder no longer shows)
+
+### Added
+- **Rename a saved floor plan** from the "Saved floor plans" list: each entry now has
+  a ✏️ button next to Delete that renames the plan (renaming the current plan also
+  updates the sidebar name field)
+
+### Changed
+- The Floor Plan Builder hides calibration, crop, project export/import and snapshot
+  controls; the Furniture Planner hides the blank-board room editor
+- The service worker serves HTML network-first (`no-store`) and refreshes stale
+  controlled pages when a new version activates, so a normal reload picks up updates
+  instead of a hard reload being required
+- Landing page also registers the service worker; cache bumped to `roomer-v13`
+
 ## Version 1.14 - Room Planner and Floor Plan Builder separated (September 2026)
 
 ### Added

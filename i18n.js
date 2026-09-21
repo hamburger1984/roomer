@@ -301,6 +301,8 @@ const TRANSLATIONS = {
     floorplan: {
       rooms: "rooms",
       deleteConfirm: "Delete this floor plan?",
+      rename: "Rename floor plan",
+      renamePrompt: "New floor plan name:",
       importSuccess: "Floor plan imported.",
       importInvalid: "Invalid floor plan data.",
       scaleBar: "Scale bar",
@@ -609,6 +611,8 @@ const TRANSLATIONS = {
     floorplan: {
       rooms: "Räume",
       deleteConfirm: "Diesen Grundriss löschen?",
+      rename: "Grundriss umbenennen",
+      renamePrompt: "Neuer Grundriss-Name:",
       importSuccess: "Grundriss importiert.",
       importInvalid: "Ungültige Grundriss-Daten.",
       scaleBar: "Maßstabsleiste",
